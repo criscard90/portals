@@ -134,8 +134,7 @@
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, -1.5, 8);
-        camera.lookAt(0, -1.5, 0);
+        camera.position.z = 8;
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -857,6 +856,7 @@
                     else if (type === 'smoke') currentGroup = buildSmokePortal();
                     else if (type === 'water') currentGroup = buildWaterPortal();
 
+                    currentGroup.position.y = -1.5;
                     currentGroup.scale.set(0, 0, 0);
                     scene.add(currentGroup);
 
@@ -868,6 +868,7 @@
         select.addEventListener('change', (e) => switchPortal(e.target.value));
 
         currentGroup = buildCosmicVortex();
+        currentGroup.position.y = -1.5;
         scene.add(currentGroup);
 
         window.addEventListener('resize', () => {

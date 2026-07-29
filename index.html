@@ -55,7 +55,7 @@
         }
 
         #fullscreen-top-border.active {
-            height: 20vh;
+            height: 10vh;
         }
 
         /* UI Selector Float */
@@ -134,8 +134,8 @@
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, -0.5, 8);
-        camera.lookAt(0, -0.5, 0);
+        camera.position.set(0, -1.5, 8);
+        camera.lookAt(0, -1.5, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);

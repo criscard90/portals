@@ -58,6 +58,39 @@
             height: 10vh;
         }
 
+        /* Toast notifications */
+        #tap-toast, #swipe-toast {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 14px;
+            letter-spacing: 0.5px;
+            z-index: 200;
+            opacity: 0;
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            pointer-events: none;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            white-space: nowrap;
+        }
+
+        #tap-toast {
+            bottom: 80px;
+        }
+
+        #swipe-toast {
+            bottom: 40px;
+        }
+
+        #tap-toast.show, #swipe-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
         /* UI Selector Float */
         #ui-controls {
             position: absolute;
@@ -109,6 +142,8 @@
 <body>
 
     <div id="fullscreen-top-border"></div>
+    <div id="tap-toast">Tap to enter fullscreen</div>
+    <div id="swipe-toast">← Swipe to switch portals →</div>
 
     <div id="ui-controls">
         <select id="portal-select">
@@ -179,6 +214,8 @@
                 }
                 uiControls.classList.add('hidden');
                 fullscreenBorder.classList.add('active');
+                hideTapToast();
+                showSwipeToast();
             } catch (err) {
                 console.log("Fullscreen request:", err);
             }
@@ -188,11 +225,86 @@
             if (!document.fullscreenElement) {
                 uiControls.classList.remove('hidden');
                 fullscreenBorder.classList.remove('active');
+                showTapToast();
             }
         });
 
         container.addEventListener('click', enableImmersiveFullscreen);
         uiControls.addEventListener('click', (e) => e.stopPropagation());
+
+        // --- TOAST NOTIFICATIONS ---
+        let toastTimeout = null;
+
+        function showTapToast() {
+            const toast = document.getElementById('tap-toast');
+            toast.classList.add('show');
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 4000);
+        }
+
+        function hideTapToast() {
+            const toast = document.getElementById('tap-toast');
+            toast.classList.remove('show');
+        }
+
+        function showSwipeToast() {
+            const toast = document.getElementById('swipe-toast');
+            toast.classList.add('show');
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Show tap toast on load
+        showTapToast();
+
+        // --- SWIPE GESTURE PER SWITCH PORTALI IN FULLSCREEN ---
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isSwiping = false;
+
+        container.addEventListener('touchstart', (e) => {
+            if (!document.fullscreenElement) return;
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+            isSwiping = true;
+        }, { passive: true });
+
+        container.addEventListener('touchmove', (e) => {
+            if (!isSwiping || !document.fullscreenElement) return;
+            e.preventDefault();
+        }, { passive: false });
+
+        container.addEventListener('touchend', (e) => {
+            if (!isSwiping || !document.fullscreenElement) return;
+            isSwiping = false;
+
+            const deltaX = e.changedTouches[0].screenX - touchStartX;
+            const deltaY = e.changedTouches[0].screenY - touchStartY;
+            const absDeltaX = Math.abs(deltaX);
+            const absDeltaY = Math.abs(deltaY);
+
+            // Only trigger if horizontal swipe > 50px and more horizontal than vertical
+            if (absDeltaX > 50 && absDeltaX > absDeltaY * 1.5) {
+                const options = Array.from(select.options);
+                const currentIndex = select.selectedIndex;
+                let newIndex;
+
+                if (deltaX < 0) {
+                    // Swipe left → next portal
+                    newIndex = (currentIndex + 1) % options.length;
+                } else {
+                    // Swipe right → previous portal
+                    newIndex = (currentIndex - 1 + options.length) % options.length;
+                }
+
+                select.selectedIndex = newIndex;
+                switchPortal(options[newIndex].value);
+            }
+        }, { passive: true });
 
         // --- GENERATORI DI PORTALI ---
 
@@ -891,5 +1003,3 @@
 
         animate();
     </script>
-</body>
-</html>

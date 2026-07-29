@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Portali Magici Cinematografici 3D</title>
+    <title>Portals</title>
     
     <!-- Configurazione PWA Fullscreen Android -->
     <meta name="mobile-web-app-capable" content="yes">
@@ -39,6 +39,23 @@
             width: 100%;
             height: 100%;
             z-index: 1;
+        }
+
+        /* Bordo nero superiore 10% per fullscreen */
+        #fullscreen-top-border {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 0;
+            background: #000;
+            z-index: 100;
+            pointer-events: none;
+            transition: height 0.3s ease;
+        }
+
+        #fullscreen-top-border.active {
+            height: 10vh;
         }
 
         /* UI Selector Float */
@@ -91,6 +108,8 @@
 </head>
 <body>
 
+    <div id="fullscreen-top-border"></div>
+
     <div id="ui-controls">
         <select id="portal-select">
             <option value="nether">Nether</option>
@@ -111,6 +130,7 @@
         const container = document.getElementById('webgl-container');
         const select = document.getElementById('portal-select');
         const uiControls = document.getElementById('ui-controls');
+        const fullscreenBorder = document.getElementById('fullscreen-top-border');
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -158,6 +178,7 @@
                     wakeLock = await navigator.wakeLock.request('screen');
                 }
                 uiControls.classList.add('hidden');
+                fullscreenBorder.classList.add('active');
             } catch (err) {
                 console.log("Fullscreen request:", err);
             }
@@ -166,6 +187,7 @@
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement) {
                 uiControls.classList.remove('hidden');
+                fullscreenBorder.classList.remove('active');
             }
         });
 
@@ -245,7 +267,7 @@
 
             for (let i = 0; i < particleCount; i++) {
                 pos[i * 3] = (Math.random() - 0.5) * 4;
-                pos[i * 3 + 1] = (Math.random() - 0.5) * 6;
+                pos[i * 3 + 1] = (Math.random() - 0.5) * 6 - 1.5;
                 pos[i * 3 + 2] = (Math.random() - 0.5) * 1.5;
                 velocities.push({ y: Math.random() * 0.02 + 0.005, x: (Math.random() - 0.5) * 0.005 });
             }
@@ -270,7 +292,7 @@
                     positions[i * 3 + 1] += velocities[i].y;
                     positions[i * 3] += velocities[i].x;
                     if (positions[i * 3 + 1] > 3.2) {
-                        positions[i * 3 + 1] = -3.2;
+                        positions[i * 3 + 1] = -4.8;
                         positions[i * 3] = (Math.random() - 0.5) * 4;
                     }
                 }
@@ -676,7 +698,7 @@
 
             for(let i = 0; i < particleCount; i++) {
                 const x = (Math.random() - 0.5) * 6.0;
-                const y = (Math.random() - 0.5) * 7.0;
+                const y = (Math.random() - 0.5) * 7.0 - 1.5;
                 const z = (Math.random() - 0.5) * 1.5;
 
                 pos[i*3] = x;
@@ -723,7 +745,7 @@
                     posArr[i*3+2] += Math.cos(time * 0.6 + posArr[i*3+1]) * 0.002 + pData[i].driftZ;
 
                     if(posArr[i*3+1] > 3.8) {
-                        posArr[i*3+1] = -3.8;
+                        posArr[i*3+1] = -5.3;
                         posArr[i*3] = (Math.random() - 0.5) * 6.0;
                         posArr[i*3+2] = (Math.random() - 0.5) * 1.5;
                     }

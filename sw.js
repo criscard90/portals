@@ -1,4 +1,4 @@
-const CACHE_NAME = 'portals-v1';
+const CACHE_NAME = 'portals-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -33,25 +33,25 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event: serve from cache, fallback to network
+// Fetch event: network-first strategy (always try network first, fallback to cache)
 self.addEventListener('fetch', (event) => {
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') return;
+
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
+    fetch(event.request).then((response) => {
+      // Cache successful responses
+      if (response && response.status === 200) {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseClone);
+        });
       }
-      return fetch(event.request).then((response) => {
-        // Cache successful responses for future
-        if (response && response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
-        }
-        return response;
-      }).catch(() => {
-        // Offline fallback: return the cached index page
-        return caches.match('/');
+      return response;
+    }).catch(() => {
+      // Offline: return from cache
+      return caches.match(event.request).then((cached) => {
+        return cached || caches.match('/');
       });
     })
   );

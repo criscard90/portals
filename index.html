@@ -155,7 +155,7 @@
             <option value="nether">Nether</option>
             <option value="doctor">Spark</option>
             <option value="cosmic" selected>Vortex</option>
-            <option value="supernova">Nova</option>
+            <option value="lightning">Storm</option>
             <option value="wormhole">Hyperdrive</option>
             <option value="quantum">Quantum</option>
             <option value="smoke">Mist</option>
@@ -560,77 +560,207 @@
             return group;
         }
 
-        function buildSupernovaCore() {
+        function buildLightningPortal() {
             const group = new THREE.Group();
 
-            const coreGeo = new THREE.SphereGeometry(1.2, 32, 32);
-            const coreMat = new THREE.MeshBasicMaterial({ color: 0xfff0aa });
-            const core = new THREE.Mesh(coreGeo, coreMat);
-            group.add(core);
-
-            const plasmaGeo = new THREE.SphereGeometry(1.8, 64, 64);
-            const plasmaMat = new THREE.ShaderMaterial({
+            // Shader per fulmini organici con branching dinamico
+            const boltMat = new THREE.ShaderMaterial({
                 uniforms: uniforms,
                 transparent: true,
                 blending: THREE.AdditiveBlending,
+                depthWrite: false,
                 vertexShader: `
-                    varying vec3 vNormal;
+                    varying vec2 vUv;
                     void main() {
-                        vNormal = normalize(normalMatrix * normal);
+                        vUv = uv;
                         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                     }
                 `,
                 fragmentShader: `
                     uniform float u_time;
-                    varying vec3 vNormal;
+                    varying vec2 vUv;
+
+                    // Hash per rumore pseudo-casuale
+                    float hash(vec2 p) {
+                        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+                    }
+
+                    // Genera un fulmine con branching naturale
+                    float lightningBolt(vec2 uv, float seed, float time) {
+                        float intensity = 0.0;
+                        
+                        // Multipli fulmini con seed diversi
+                        for (int b = 0; b < 6; b++) {
+                            float fi = float(b);
+                            vec2 offset = vec2(hash(vec2(fi, seed)), hash(vec2(fi + 1.0, seed)));
+                            
+                            // Posizione base del fulmine (da alto a basso)
+                            vec2 base = vec2(
+                                0.5 + (offset.x - 0.5) * 0.8,
+                                0.0
+                            );
+                            
+                            // Direzione con leggera inclinazione
+                            vec2 dir = vec2(
+                                (offset.y - 0.5) * 0.3,
+                                1.0
+                            );
+                            
+                            // Calcola distanza dalla linea principale
+                            vec2 p = uv - base;
+                            float proj = dot(p, dir) / dot(dir, dir);
+                            
+                            if (proj > 0.0 && proj < 1.0) {
+                                // Posizione sul segmento
+                                vec2 pointOnLine = base + dir * proj;
+                                vec2 diff = uv - pointOnLine;
+                                
+                                // Zigzag usando noise
+                                float zigFreq = 8.0 + fi * 2.0;
+                                float zig = sin(proj * zigFreq + offset.x * 10.0 + time * 0.5) * 0.06;
+                                zig += sin(proj * zigFreq * 1.5 + offset.y * 7.0 + time * 0.3) * 0.03;
+                                
+                                // Distanza dalla linea a zigzag
+                                float dist = abs(diff.x - zig);
+                                
+                                // Flicker ad alta frequenza
+                                float flicker = 0.5 + 0.5 * sin(
+                                    time * (30.0 + fi * 5.0) + 
+                                    proj * 50.0 + 
+                                    offset.x * 100.0
+                                );
+                                flicker = pow(flicker, 4.0);
+                                
+                                // Attenuazione lungo la lunghezza
+                                float decay = 1.0 - proj;
+                                decay = pow(decay, 0.7);
+                                
+                                // Core del fulmine (sottile e luminoso)
+                                float core = smoothstep(0.02, 0.0, dist) * decay * flicker;
+                                
+                                // Bagliore esterno (più largo e debole)
+                                float glow = smoothstep(0.08, 0.0, dist) * decay * 0.3 * flicker;
+                                glow += smoothstep(0.15, 0.0, dist) * decay * 0.1 * flicker;
+                                
+                                // Rami laterali
+                                float branchIntensity = 0.0;
+                                for (int r = 0; r < 3; r++) {
+                                    float ri = float(r);
+                                    float branchPos = hash(vec2(fi, ri + 10.0)) * 0.7 + 0.1;
+                                    float branchAngle = (hash(vec2(fi, ri + 20.0)) - 0.5) * 1.2;
+                                    float branchLen = (0.2 + hash(vec2(fi, ri + 30.0)) * 0.3) * (1.0 - branchPos);
+                                    
+                                    if (proj > branchPos - 0.02 && proj < branchPos + 0.02) {
+                                        vec2 branchDir = vec2(sin(branchAngle), cos(branchAngle) * 0.5);
+                                        vec2 branchPoint = pointOnLine + branchDir * branchLen * (proj - branchPos) * 20.0;
+                                        float branchDist = length(uv - branchPoint);
+                                        branchIntensity += smoothstep(0.04, 0.0, branchDist) * 0.3 * flicker * (1.0 - branchPos) * 0.5;
+                                    }
+                                }
+                                
+                                intensity += (core + glow + branchIntensity) * (1.0 - fi * 0.08);
+                            }
+                        }
+                        
+                        return intensity;
+                    }
+
                     void main() {
-                        float intensity = pow(0.6 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.5);
-                        vec3 col = mix(vec3(1.0, 0.2, 0.0), vec3(1.0, 0.8, 0.1), sin(u_time * 4.0) * 0.5 + 0.5);
-                        gl_FragColor = vec4(col, intensity * 0.9);
+                        vec2 uv = vUv;
+                        float time = u_time;
+                        
+                        // Fulmini con seed diversi per varietà
+                        float bolt1 = lightningBolt(uv, 1.0, time);
+                        float bolt2 = lightningBolt(uv, 2.0, time + 1.5);
+                        float bolt3 = lightningBolt(uv, 3.0, time + 3.2);
+                        float bolt4 = lightningBolt(uv, 4.0, time + 4.7);
+                        float bolt5 = lightningBolt(uv, 5.0, time + 6.1);
+                        float bolt6 = lightningBolt(uv, 6.0, time + 7.8);
+                        
+                        // Fulmini occasionali (esplosioni)
+                        float randomBurst = hash(vec2(floor(time * 2.3), 99.0));
+                        float burstTrigger = smoothstep(0.0, 0.1, fract(time * 2.3));
+                        float burst = 0.0;
+                        if (randomBurst > 0.6) {
+                            vec2 burstUV = uv + vec2(hash(vec2(floor(time * 2.3), 55.0)) - 0.5, 0.0) * 0.5;
+                            burst = lightningBolt(burstUV, randomBurst * 10.0, time * 1.5) * 1.5 * (1.0 - burstTrigger);
+                        }
+                        
+                        // Flash ambientale
+                        float flash = sin(time * 4.7) * 0.5 + 0.5;
+                        flash = pow(flash, 12.0) * 0.4;
+                        flash += sin(time * 6.1) * 0.5 + 0.5;
+                        flash = max(flash, pow(flash, 20.0) * 0.6);
+                        
+                        // Colori
+                        vec3 colCore = vec3(1.0, 1.0, 1.0);
+                        vec3 colGlow = vec3(0.4, 0.6, 1.0);
+                        vec3 colOuter = vec3(0.1, 0.2, 0.6);
+                        
+                        float total = bolt1 + bolt2 + bolt3 + bolt4 + bolt5 + bolt6 + burst;
+                        
+                        vec3 color = colOuter * total * 0.3;
+                        color += colGlow * total * 0.5;
+                        color += colCore * total * 0.8;
+                        color += colCore * flash * 0.5;
+                        
+                        // Maschera circolare
+                        float dist = length(uv - vec2(0.5));
+                        float mask = smoothstep(0.5, 0.05, dist);
+                        float edgeGlow = smoothstep(0.5, 0.4, dist) * 0.15;
+                        
+                        color += colGlow * edgeGlow;
+                        
+                        float alpha = (total * 0.7 + flash * 0.3) * mask;
+                        gl_FragColor = vec4(color, alpha);
                     }
                 `
             });
-            const plasma = new THREE.Mesh(plasmaGeo, plasmaMat);
-            group.add(plasma);
 
-            const count = 5000;
-            const geo = new THREE.BufferGeometry();
-            const pos = new Float32Array(count * 3);
-            const colors = new Float32Array(count * 3);
-            const pData = [];
+            const plane = new THREE.PlaneGeometry(5.5, 7.5, 1, 1);
+            const mesh = new THREE.Mesh(plane, boltMat);
+            mesh.position.z = -0.1;
+            group.add(mesh);
 
-            const c1 = new THREE.Color(0xff2200);
-            const c2 = new THREE.Color(0xffaa00);
-            const c3 = new THREE.Color(0xffffff);
+            // Particelle di scintille elettriche
+            const sparkCount = 2500;
+            const sparkGeo = new THREE.BufferGeometry();
+            const sparkPos = new Float32Array(sparkCount * 3);
+            const sparkColors = new Float32Array(sparkCount * 3);
+            const sparkData = [];
 
-            for(let i = 0; i < count; i++) {
-                const dir = new THREE.Vector3(
-                    Math.random() - 0.5,
-                    Math.random() - 0.5,
-                    Math.random() - 0.5
-                ).normalize();
+            const cWhite = new THREE.Color(0xffffff);
+            const cBlue = new THREE.Color(0x4488ff);
+            const cCyan = new THREE.Color(0x00ccff);
 
-                const speed = Math.random() * 0.03 + 0.01;
-                const dist = Math.random() * 4.5 + 0.2;
+            for (let i = 0; i < sparkCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 3.2 + 0.1;
+                sparkPos[i*3] = Math.cos(angle) * radius;
+                sparkPos[i*3+1] = (Math.random() - 0.5) * 6.5;
+                sparkPos[i*3+2] = (Math.random() - 0.5) * 0.6;
 
-                pos[i*3] = dir.x * dist;
-                pos[i*3+1] = dir.y * dist;
-                pos[i*3+2] = dir.z * dist;
+                const rand = Math.random();
+                const c = rand > 0.5 ? cWhite : (rand > 0.25 ? cBlue : cCyan);
+                sparkColors[i*3] = c.r;
+                sparkColors[i*3+1] = c.g;
+                sparkColors[i*3+2] = c.b;
 
-                const randC = Math.random();
-                const c = randC > 0.7 ? c3 : (randC > 0.3 ? c2 : c1);
-                colors[i*3] = c.r;
-                colors[i*3+1] = c.g;
-                colors[i*3+2] = c.b;
-
-                pData.push({ dir, dist, speed });
+                sparkData.push({
+                    angle: Math.random() * Math.PI * 2,
+                    radius: Math.random() * 3.2 + 0.1,
+                    vx: (Math.random() - 0.5) * 0.03,
+                    vy: (Math.random() - 0.5) * 0.03 + 0.01,
+                    life: Math.random(),
+                    speed: 0.2 + Math.random() * 0.8
+                });
             }
 
-            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+            sparkGeo.setAttribute('color', new THREE.BufferAttribute(sparkColors, 3));
 
-            const mat = new THREE.PointsMaterial({
-                size: 0.1,
+            const sparkMat = new THREE.PointsMaterial({
+                size: 0.05,
                 vertexColors: true,
                 map: particleTexture,
                 transparent: true,
@@ -638,27 +768,81 @@
                 blending: THREE.AdditiveBlending,
                 depthWrite: false
             });
+            const sparkPoints = new THREE.Points(sparkGeo, sparkMat);
+            group.add(sparkPoints);
 
-            const blast = new THREE.Points(geo, mat);
-            group.add(blast);
+            // Nube di fondo (atmosfera temporalesca)
+            const cloudCount = 800;
+            const cloudGeo = new THREE.BufferGeometry();
+            const cloudPos = new Float32Array(cloudCount * 3);
+            const cloudData = [];
 
+            for (let i = 0; i < cloudCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 3.5 + 0.5;
+                cloudPos[i*3] = Math.cos(angle) * radius;
+                cloudPos[i*3+1] = (Math.random() - 0.5) * 7.0;
+                cloudPos[i*3+2] = (Math.random() - 0.5) * 0.5 - 0.3;
+                cloudData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: Math.random() * 0.002 + 0.001
+                });
+            }
+
+            cloudGeo.setAttribute('position', new THREE.BufferAttribute(cloudPos, 3));
+            const cloudMat = new THREE.PointsMaterial({
+                size: 0.3,
+                color: 0x1a1a2e,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.3,
+                blending: THREE.NormalBlending,
+                depthWrite: false
+            });
+            const cloudPoints = new THREE.Points(cloudGeo, cloudMat);
+            group.add(cloudPoints);
+
+            // Update
             group.userData.update = () => {
                 const t = uniforms.u_time.value;
-                core.scale.setScalar(1 + Math.sin(t * 5) * 0.08);
-                plasma.scale.setScalar(1 + Math.cos(t * 3) * 0.06);
 
-                const posArr = blast.geometry.attributes.position.array;
-                for(let i = 0; i < count; i++) {
-                    pData[i].dist += pData[i].speed;
-                    if(pData[i].dist > 4.8) {
-                        pData[i].dist = 0.3;
+                // Sparks
+                const sPos = sparkPoints.geometry.attributes.position.array;
+                const sCol = sparkPoints.geometry.attributes.color.array;
+                const colObj = new THREE.Color();
+                for (let i = 0; i < sparkCount; i++) {
+                    sparkData[i].life += 0.005 * sparkData[i].speed;
+                    if (sparkData[i].life > 1) {
+                        sparkData[i].life = 0;
+                        sparkData[i].radius = Math.random() * 3.2 + 0.1;
+                        sparkData[i].angle = Math.random() * Math.PI * 2;
+                        sparkData[i].vx = (Math.random() - 0.5) * 0.03;
+                        sparkData[i].vy = (Math.random() - 0.5) * 0.03 + 0.01;
                     }
-                    posArr[i*3] = pData[i].dir.x * pData[i].dist;
-                    posArr[i*3+1] = pData[i].dir.y * pData[i].dist;
-                    posArr[i*3+2] = pData[i].dir.z * pData[i].dist;
+                    sparkData[i].angle += 0.008;
+                    sPos[i*3] = Math.cos(sparkData[i].angle) * sparkData[i].radius + Math.sin(t * 0.5 + i) * 0.02;
+                    sPos[i*3+1] += sparkData[i].vy;
+                    if (sPos[i*3+1] > 3.8) sPos[i*3+1] = -3.8;
+                    if (sPos[i*3+1] < -3.8) sPos[i*3+1] = 3.8;
+
+                    const pulse = Math.sin(sparkData[i].life * Math.PI);
+                    colObj.setHSL(0.58, 0.7, 0.3 + pulse * 0.6);
+                    sCol[i*3] = colObj.r;
+                    sCol[i*3+1] = colObj.g;
+                    sCol[i*3+2] = colObj.b;
                 }
-                blast.geometry.attributes.position.needsUpdate = true;
-                group.rotation.y += 0.003;
+                sparkPoints.geometry.attributes.position.needsUpdate = true;
+                sparkPoints.geometry.attributes.color.needsUpdate = true;
+
+                // Cloud rotation
+                const cPos = cloudPoints.geometry.attributes.position.array;
+                for (let i = 0; i < cloudCount; i++) {
+                    cloudData[i].angle += cloudData[i].speed;
+                    cPos[i*3] = Math.cos(cloudData[i].angle) * cloudData[i].radius;
+                }
+                cloudPoints.geometry.attributes.position.needsUpdate = true;
+                cloudPoints.material.opacity = 0.15 + 0.15 * (0.5 + 0.5 * Math.sin(t * 2.3));
             };
 
             return group;
@@ -967,7 +1151,7 @@
                     if (type === 'nether') currentGroup = buildNetherPortal();
                     else if (type === 'doctor') currentGroup = buildDoctorStrangePortal();
                     else if (type === 'cosmic') currentGroup = buildCosmicVortex();
-                    else if (type === 'supernova') currentGroup = buildSupernovaCore();
+                    else if (type === 'lightning') currentGroup = buildLightningPortal();
                     else if (type === 'wormhole') currentGroup = buildWormhole();
                     else if (type === 'quantum') currentGroup = buildQuantumPortal();
                     else if (type === 'smoke') currentGroup = buildSmokePortal();

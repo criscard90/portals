@@ -1,10 +1,10 @@
 const CACHE_NAME = 'portals-v1';
 const ASSETS_TO_CACHE = [
-  '/portals/',
-  '/portals/index.html',
-  '/portals/manifest.json',
-  '/portals/icons/icon-192.svg',
-  '/portals/icons/icon-512.svg'
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/icons/icon-192.svg',
+  '/icons/icon-512.svg'
 ];
 
 // Install event: cache core assets
@@ -51,7 +51,7 @@ self.addEventListener('fetch', (event) => {
         return response;
       }).catch(() => {
         // Offline fallback: return the cached index page
-        return caches.match('/portals/');
+        return caches.match('/');
       });
     })
   );

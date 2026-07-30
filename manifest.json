@@ -2,7 +2,7 @@
   "name": "Portals",
   "short_name": "Portals",
   "description": "Esperienza visiva interattiva con portali 3D psichedelici",
-  "start_url": "/portals/",
+  "start_url": "/",
   "display": "fullscreen",
   "orientation": "portrait",
   "theme_color": "#000000",
@@ -27,7 +27,7 @@
   "screenshots": [],
   "related_applications": [],
   "prefer_related_applications": false,
-  "scope": "/portals/",
+  "scope": "/",
   "launch_handler": {
     "client_mode": "focus-existing"
   }

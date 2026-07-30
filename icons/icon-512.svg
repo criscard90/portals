@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#000000" rx="64"/>
+  <defs>
+    <radialGradient id="g1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#7b2ff7"/>
+      <stop offset="50%" stop-color="#3a0ca3"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+    <radialGradient id="g2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e0aaff" stop-opacity="0.9"/>
+      <stop offset="40%" stop-color="#7b2ff7" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#3a0ca3" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="g3" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8"/>
+      <stop offset="30%" stop-color="#e0aaff" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#7b2ff7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Outer glow -->
+  <circle cx="256" cy="256" r="240" fill="url(#g1)"/>
+  <!-- Middle ring -->
+  <circle cx="256" cy="256" r="190" fill="url(#g2)"/>
+  <!-- Inner core -->
+  <circle cx="256" cy="256" r="110" fill="url(#g3)"/>
+  <!-- Vortex lines -->
+  <g stroke="#e0aaff" stroke-width="3" fill="none" opacity="0.6">
+    <path d="M256 256 Q290 160 375 185 Q430 215 420 280 Q410 345 350 360 Q295 375 256 320" />
+    <path d="M256 256 Q220 350 135 325 Q80 295 90 230 Q100 165 160 150 Q215 135 256 190" />
+    <path d="M256 256 Q320 215 350 160 Q375 105 320 80 Q270 55 240 105 Q215 155 256 200" />
+    <path d="M256 256 Q190 295 160 350 Q135 405 190 430 Q240 455 270 405 Q295 355 256 310" />
+  </g>
+  <!-- Center dot -->
+  <circle cx="256" cy="256" r="16" fill="#ffffff" opacity="0.9"/>
+</svg>

@@ -13,8 +13,8 @@
     <meta name="application-name" content="Portals">
     <meta name="apple-mobile-web-app-title" content="Portals">
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/svg+xml" href="icons/icon-192.svg">
-    <link rel="apple-touch-icon" href="icons/icon-192.svg">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
 
     <!-- Librerie Esterne: Three.js per 3D/GLSL e GSAP per fluidità organica -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -1455,9 +1455,8 @@
         // --- SERVICE WORKER REGISTRATION PWA ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js?v=2').then((reg) => {
+                navigator.serviceWorker.register('sw.js?v=3').then((reg) => {
                     console.log('Service Worker registered:', reg.scope);
-                    // Check for updates
                     reg.update();
                 }).catch((err) => {
                     console.log('Service Worker registration failed:', err);

@@ -421,7 +421,7 @@
 
         function buildDoctorStrangePortal() {
             const group = new THREE.Group();
-            const particleCount = 8000;
+            const particleCount = 6000;
             const geo = new THREE.BufferGeometry();
             const positions = new Float32Array(particleCount * 3);
             const colors = new Float32Array(particleCount * 3);
@@ -432,7 +432,7 @@
 
             for (let i = 0; i < particleCount; i++) {
                 const angle = Math.random() * Math.PI * 2;
-                const radius = 2.5 + (Math.random() - 0.5) * 0.4;
+                const radius = 1.8 + (Math.random() - 0.5) * 0.3;
                 
                 positions[i * 3] = Math.cos(angle) * radius;
                 positions[i * 3 + 1] = Math.sin(angle) * radius;
@@ -473,8 +473,8 @@
                     pData[i].angle += pData[i].speed;
                     pData[i].radius += pData[i].tangentalSpeed * 0.1;
 
-                    if (Math.abs(pData[i].radius - 2.5) > 0.6) {
-                        pData[i].radius = 2.5 + (Math.random() - 0.5) * 0.3;
+                    if (Math.abs(pData[i].radius - 1.8) > 0.5) {
+                        pData[i].radius = 1.8 + (Math.random() - 0.5) * 0.2;
                     }
 
                     posArr[i * 3] = Math.cos(pData[i].angle) * pData[i].radius;
@@ -936,7 +936,7 @@
 
         function buildQuantumPortal() {
             const group = new THREE.Group();
-            const count = 4000;
+            const count = 3000;
             const geo = new THREE.BufferGeometry();
             const pos = new Float32Array(count * 3);
             const pData = [];
@@ -946,7 +946,7 @@
                 const v = Math.random();
                 const theta = u * Math.PI * 2;
                 const phi = Math.acos(2 * v - 1);
-                const r = 2.5 + Math.sin(theta * 4) * 0.3;
+                const r = 1.8 + Math.sin(theta * 4) * 0.2;
 
                 pos[i*3] = r * Math.sin(phi) * Math.cos(theta);
                 pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
@@ -957,7 +957,7 @@
 
             geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
             const mat = new THREE.PointsMaterial({
-                size: 0.07,
+                size: 0.06,
                 color: 0x00ffff,
                 transparent: true,
                 opacity: 0.8,
@@ -974,7 +974,7 @@
                 const t = uniforms.u_time.value;
                 for(let i = 0; i < count; i++) {
                     pData[i].theta += pData[i].speed;
-                    const r = 2.5 + Math.sin(pData[i].theta * 5 + t * 2) * 0.4;
+                    const r = 1.8 + Math.sin(pData[i].theta * 5 + t * 2) * 0.3;
                     
                     pArr[i*3] = r * Math.sin(pData[i].phi) * Math.cos(pData[i].theta);
                     pArr[i*3+1] = r * Math.sin(pData[i].phi) * Math.sin(pData[i].theta);

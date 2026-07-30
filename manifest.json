@@ -1,8 +1,8 @@
 {
   "name": "Portals",
   "short_name": "Portals",
-  "description": "Esperienza visiva interattiva con portali 3D psichedelici",
-  "start_url": "/",
+  "description": "Portals is a web application that allows users to explore and interact with various digital art installations and visual experiences.",
+  "start_url": "/index.html",
   "display": "fullscreen",
   "orientation": "portrait",
   "theme_color": "#000000",

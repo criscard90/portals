@@ -162,6 +162,9 @@
             <option value="water">Aqua</option>
             <option value="fire">Inferno</option>
             <option value="alien">Xenon</option>
+            <option value="dragon">Dragon</option>
+            <option value="paradise">Paradise</option>
+            <option value="aurora">Aurora</option>
         </select>
     </div>
 
@@ -504,8 +507,8 @@
                 const z = (Math.random() - 0.5) * -0.5;
                 
                 // Disco frontale: particelle sul piano X-Y con profondità Z
-                positions[i * 3] = Math.cos(angle) * dist;
-                positions[i * 3 + 1] = Math.sin(angle) * dist * 0.6;
+                positions[i * 3] = Math.cos(angle) * dist * 0.85;
+                positions[i * 3 + 1] = Math.sin(angle) * dist;
                 positions[i * 3 + 2] = z;
 
                 pData.push({
@@ -547,6 +550,84 @@
             holeMesh.position.z = -0.5;
             group.add(holeMesh);
 
+            // Particelle bianche grandi che vengono inghiottite dal buco nero
+            const swallowCount = 200;
+            const swallowGeo = new THREE.BufferGeometry();
+            const swallowPos = new Float32Array(swallowCount * 3);
+            const swallowCol = new Float32Array(swallowCount * 3);
+            const swallowData = [];
+
+            for (let i = 0; i < swallowCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 1.5 + Math.random() * 1.5;
+
+                swallowPos[i*3] = Math.cos(angle) * radius * 0.85;
+                swallowPos[i*3+1] = Math.sin(angle) * radius;
+                swallowPos[i*3+2] = 0;
+
+                swallowCol[i*3] = 1.0;
+                swallowCol[i*3+1] = 1.0;
+                swallowCol[i*3+2] = 1.0;
+
+                swallowData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: 0.02 + Math.random() * 0.03
+                });
+            }
+
+            swallowGeo.setAttribute('position', new THREE.BufferAttribute(swallowPos, 3));
+            swallowGeo.setAttribute('color', new THREE.BufferAttribute(swallowCol, 3));
+
+            const swallowMat = new THREE.PointsMaterial({
+                size: 0.12,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.9,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            const swallowPoints = new THREE.Points(swallowGeo, swallowMat);
+            group.add(swallowPoints);
+
+            // Lampi random organici (radiali)
+            const flashGeo = new THREE.PlaneGeometry(5, 6);
+            const flashMat = new THREE.ShaderMaterial({
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+                uniforms: {
+                    u_opacity: { value: 0 }
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float u_opacity;
+                    varying vec2 vUv;
+                    void main() {
+                        vec2 pos = vUv - 0.5;
+                        float dist = length(pos);
+                        float falloff = smoothstep(0.5, 0.0, dist);
+                        falloff = pow(falloff, 2.0);
+                        gl_FragColor = vec4(1.0, 1.0, 1.0, falloff * u_opacity);
+                    }
+                `
+            });
+            const flashMesh = new THREE.Mesh(flashGeo, flashMat);
+            flashMesh.position.z = -0.3;
+            group.add(flashMesh);
+
+            let flashIntensity = 0;
+            let flashCooldown = Math.random() * 3;
+
             group.userData.update = () => {
                 const posArr = points.geometry.attributes.position.array;
                 const colArr = points.geometry.attributes.color.array;
@@ -564,8 +645,8 @@
                     const dist = pData[i].dist;
                     const angle = pData[i].angle;
                     
-                    posArr[i * 3] = Math.cos(angle) * dist;
-                    posArr[i * 3 + 1] = Math.sin(angle) * dist * 0.6;
+                    posArr[i * 3] = Math.cos(angle) * dist * 0.85;
+                    posArr[i * 3 + 1] = Math.sin(angle) * dist;
                     
                     // Movimento Z verso la camera (effetto risucchio)
                     pData[i].z += 0.02;
@@ -584,6 +665,33 @@
                 }
                 points.geometry.attributes.position.needsUpdate = true;
                 points.geometry.attributes.color.needsUpdate = true;
+
+                // Aggiorna particelle bianche inghiottite
+                const swPos = swallowPoints.geometry.attributes.position.array;
+
+                for (let i = 0; i < swallowCount; i++) {
+                    swallowData[i].radius -= swallowData[i].speed;
+
+                    if (swallowData[i].radius < 0.7) {
+                        swallowData[i].radius = 1.5 + Math.random() * 1.5;
+                        swallowData[i].angle = Math.random() * Math.PI * 2;
+                    }
+
+                    swPos[i*3] = Math.cos(swallowData[i].angle) * swallowData[i].radius * 0.85;
+                    swPos[i*3+1] = Math.sin(swallowData[i].angle) * swallowData[i].radius;
+                }
+                swallowPoints.geometry.attributes.position.needsUpdate = true;
+
+                // Aggiorna lampi random
+                flashCooldown -= 0.016;
+                if (flashCooldown <= 0) {
+                    flashIntensity = 0.3 + Math.random() * 0.5;
+                    flashCooldown = 1 + Math.random() * 4;
+                }
+                if (flashIntensity > 0) {
+                    flashIntensity *= 0.8;
+                    flashMat.uniforms.u_opacity.value = flashIntensity;
+                }
             };
 
             return group;
@@ -763,10 +871,11 @@
             for (let i = 0; i < streakCount; i++) {
                 const angle = Math.random() * Math.PI * 2;
                 const radius = Math.random() * 3.2 + 0.1;
+                const z = (Math.random() - 0.5) * 60;
                 
                 positions[i * 3] = Math.cos(angle) * radius;
-                positions[i * 3 + 1] = Math.sin(angle) * radius * 0.7 - 1.5;
-                positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+                positions[i * 3 + 1] = Math.sin(angle) * radius - 2.5;
+                positions[i * 3 + 2] = z;
 
                 const rand = Math.random();
                 const c = rand > 0.85 ? cWhite : (rand > 0.5 ? cCyan : cBlue);
@@ -777,8 +886,9 @@
                 pData.push({
                     angle: angle,
                     radius: radius,
-                    speed: Math.random() * 1.5 + 0.8,
-                    baseZ: positions[i * 3 + 2]
+                    speed: 0.015 + Math.random() * 0.02,
+                    z: z,
+                    baseZ: z
                 });
             }
 
@@ -834,7 +944,7 @@
                 `
             });
             const glowMesh = new THREE.Mesh(glowGeo, glowMat);
-            glowMesh.position.z = -2;
+            glowMesh.position.set(0, -2.5, -1);
             group.add(glowMesh);
 
             group.userData.update = () => {
@@ -842,7 +952,7 @@
                 const t = uniforms.u_time.value;
 
                 for (let i = 0; i < streakCount; i++) {
-                    pData[i].radius += pData[i].speed * 0.012;
+                    pData[i].radius += pData[i].speed;
                     
                     if (pData[i].radius > 3.3) {
                         pData[i].radius = 0.1;
@@ -853,9 +963,9 @@
                     const a = pData[i].angle;
                     
                     posArr[i * 3] = Math.cos(a) * r;
-                    posArr[i * 3 + 1] = Math.sin(a) * r * 0.7 - 1.5;
+                    posArr[i * 3 + 1] = Math.sin(a) * r - 2.5;
                     
-                    // Move Z forward to simulate flying through tunnel
+                    // Movimento Z per effetto tunnel
                     posArr[i * 3 + 2] += pData[i].speed;
                     if (posArr[i * 3 + 2] > 30) {
                         posArr[i * 3 + 2] = -60;
@@ -1462,6 +1572,1022 @@
             return group;
         }
 
+        function buildDragonPortal() {
+            const group = new THREE.Group();
+
+            // Shader scaglie di drago con soffio di fuoco
+            const dragonMat = new THREE.ShaderMaterial({
+                uniforms: uniforms,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float u_time;
+                    varying vec2 vUv;
+
+                    float hash(vec2 p) {
+                        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+                    }
+
+                    float noise(vec2 p) {
+                        vec2 i = floor(p);
+                        vec2 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        return mix(
+                            mix(hash(i), hash(i + vec2(1.0,0.0)), f.x),
+                            mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0,1.0)), f.x),
+                            f.y
+                        );
+                    }
+
+                    float fbm(vec2 p) {
+                        float v = 0.0;
+                        float a = 0.5;
+                        for (int i = 0; i < 4; i++) {
+                            v += a * noise(p);
+                            p *= 2.0;
+                            a *= 0.5;
+                        }
+                        return v;
+                    }
+
+                    void main() {
+                        vec2 uv = vUv;
+                        float time = u_time;
+                        
+                        // Maschera circolare
+                        vec2 pos = uv - 0.5;
+                        float dist = length(pos);
+                        float mask = smoothstep(0.48, 0.0, dist);
+                        
+                        // Coordinate distorte per scaglie organiche
+                        vec2 distorted = uv * 4.0;
+                        distorted.x += fbm(uv * 3.0 + time * 0.1) * 0.2;
+                        distorted.y += fbm(uv * 3.0 + vec2(time * 0.08, 0.0)) * 0.2;
+                        
+                        // Griglia esagonale per scaglie
+                        vec2 h = distorted * vec2(1.0, 1.1547);
+                        vec2 a = mod(h, 1.0) - 0.5;
+                        vec2 b = mod(h + vec2(0.5, 0.5), 1.0) - 0.5;
+                        float d = min(dot(a, a), dot(b, b));
+                        
+                        float scaleEdge = smoothstep(0.15, 0.25, d);
+                        float scaleCenter = smoothstep(0.3, 0.0, d);
+                        float scales = 1.0 - scaleEdge * 0.7 + scaleCenter * 0.3;
+                        
+                        // Soffio di fuoco dal centro
+                        float breath = 1.0 - smoothstep(0.0, 0.35, dist);
+                        breath = pow(breath, 2.0);
+                        breath *= 0.5 + 0.5 * sin(time * 3.0);
+                        
+                        // Vortici di energia
+                        float angle = atan(pos.y, pos.x);
+                        float swirl = sin(dist * 20.0 - time * 3.0 + angle * 4.0) * 0.5 + 0.5;
+                        swirl *= smoothstep(0.4, 0.1, dist);
+                        
+                        // Pulsazione energetica
+                        float pulse = 0.5 + 0.5 * sin(time * 1.5 + dist * 5.0);
+                        
+                        // Colori drago: oro, arancione, rosso, rosso scuro
+                        vec3 cGold = vec3(1.0, 0.8, 0.2);
+                        vec3 cOrange = vec3(1.0, 0.4, 0.0);
+                        vec3 cRed = vec3(0.9, 0.1, 0.0);
+                        vec3 cDark = vec3(0.3, 0.05, 0.0);
+                        vec3 cWhite = vec3(1.0, 0.95, 0.8);
+                        
+                        // Mix colore basato sulle scaglie e fuoco
+                        float t = scales * 0.5 + breath * 0.3 + swirl * 0.2;
+                        vec3 color = mix(cDark, cRed, smoothstep(0.0, 0.4, t));
+                        color = mix(color, cOrange, smoothstep(0.3, 0.6, t));
+                        color = mix(color, cGold, smoothstep(0.5, 0.8, t));
+                        color = mix(color, cWhite, smoothstep(0.7, 1.0, t));
+                        
+                        // Bagliore del soffio
+                        color += cGold * breath * 0.5;
+                        color += cOrange * swirl * 0.3;
+                        
+                        // Glow sui bordi delle scaglie
+                        float edgeGlow = (1.0 - scales) * smoothstep(0.4, 0.2, dist);
+                        color += cGold * edgeGlow * 0.4 * pulse;
+                        
+                        // Bordo esterno
+                        float rim = smoothstep(0.48, 0.4, dist) * (1.0 - smoothstep(0.4, 0.35, dist));
+                        color += cOrange * rim * 0.5;
+                        
+                        float alpha = (scales * 0.5 + breath * 0.4 + swirl * 0.2 + edgeGlow * 0.3 + rim * 0.5) * mask;
+                        gl_FragColor = vec4(color, alpha);
+                    }
+                `
+            });
+
+            const plane = new THREE.PlaneGeometry(5, 7, 1, 1);
+            const mesh = new THREE.Mesh(plane, dragonMat);
+            group.add(mesh);
+
+            // Particelle soffio di fuoco
+            const breathCount = 2000;
+            const breathGeo = new THREE.BufferGeometry();
+            const breathPos = new Float32Array(breathCount * 3);
+            const breathCol = new Float32Array(breathCount * 3);
+            const breathData = [];
+            
+            const cFire1 = new THREE.Color(1.0, 0.8, 0.2);
+            const cFire2 = new THREE.Color(1.0, 0.4, 0.0);
+            const cFire3 = new THREE.Color(0.9, 0.1, 0.0);
+            const cFire4 = new THREE.Color(1.0, 0.95, 0.8);
+            
+            for (let i = 0; i < breathCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 0.3;
+                
+                breathPos[i*3] = Math.cos(angle) * radius;
+                breathPos[i*3+1] = Math.sin(angle) * radius;
+                breathPos[i*3+2] = (Math.random() - 0.5) * 0.2;
+                
+                const rand = Math.random();
+                const c = rand > 0.8 ? cFire4 : (rand > 0.5 ? cFire1 : (rand > 0.25 ? cFire2 : cFire3));
+                breathCol[i*3] = c.r;
+                breathCol[i*3+1] = c.g;
+                breathCol[i*3+2] = c.b;
+                
+                breathData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: 0.008 + Math.random() * 0.015,
+                    life: Math.random(),
+                    phase: Math.random() * 6.28
+                });
+            }
+            
+            breathGeo.setAttribute('position', new THREE.BufferAttribute(breathPos, 3));
+            breathGeo.setAttribute('color', new THREE.BufferAttribute(breathCol, 3));
+            
+            const breathMat = new THREE.PointsMaterial({
+                size: 0.06,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            
+            const breathPoints = new THREE.Points(breathGeo, breathMat);
+            group.add(breathPoints);
+
+            // Braci che salgono
+            const emberCount = 800;
+            const emberGeo = new THREE.BufferGeometry();
+            const emberPos = new Float32Array(emberCount * 3);
+            const emberCol = new Float32Array(emberCount * 3);
+            const emberData = [];
+            
+            for (let i = 0; i < emberCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 2.0;
+                
+                emberPos[i*3] = Math.cos(angle) * radius;
+                emberPos[i*3+1] = Math.sin(angle) * radius * 0.5 - 1.0;
+                emberPos[i*3+2] = (Math.random() - 0.5) * 0.3;
+                
+                const rand = Math.random();
+                const c = rand > 0.6 ? cFire1 : (rand > 0.3 ? cFire2 : cFire3);
+                emberCol[i*3] = c.r;
+                emberCol[i*3+1] = c.g;
+                emberCol[i*3+2] = c.b;
+                
+                emberData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: 0.005 + Math.random() * 0.015,
+                    drift: (Math.random() - 0.5) * 0.003,
+                    life: Math.random(),
+                    phase: Math.random() * 6.28,
+                    baseY: emberPos[i*3+1]
+                });
+            }
+            
+            emberGeo.setAttribute('position', new THREE.BufferAttribute(emberPos, 3));
+            emberGeo.setAttribute('color', new THREE.BufferAttribute(emberCol, 3));
+            
+            const emberMat = new THREE.PointsMaterial({
+                size: 0.04,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.7,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            
+            const emberPoints = new THREE.Points(emberGeo, emberMat);
+            group.add(emberPoints);
+
+            group.userData.update = () => {
+                const t = uniforms.u_time.value;
+                const colObj = new THREE.Color();
+                
+                // Aggiorna soffio di fuoco
+                const bPos = breathPoints.geometry.attributes.position.array;
+                const bCol = breathPoints.geometry.attributes.color.array;
+                
+                for (let i = 0; i < breathCount; i++) {
+                    breathData[i].life += 0.008;
+                    if (breathData[i].life > 1) {
+                        breathData[i].life = 0;
+                        breathData[i].radius = Math.random() * 0.3;
+                        breathData[i].angle = Math.random() * Math.PI * 2;
+                    }
+                    
+                    breathData[i].radius += breathData[i].speed;
+                    breathData[i].angle += 0.01;
+                    
+                    bPos[i*3] = Math.cos(breathData[i].angle) * breathData[i].radius;
+                    bPos[i*3+1] = Math.sin(breathData[i].angle) * breathData[i].radius;
+                    
+                    const pulse = Math.sin(breathData[i].life * Math.PI);
+                    const hue = 0.08 + pulse * 0.05;
+                    colObj.setHSL(hue, 0.9, 0.3 + pulse * 0.5);
+                    bCol[i*3] = colObj.r;
+                    bCol[i*3+1] = colObj.g;
+                    bCol[i*3+2] = colObj.b;
+                }
+                breathPoints.geometry.attributes.position.needsUpdate = true;
+                breathPoints.geometry.attributes.color.needsUpdate = true;
+                
+                // Aggiorna braci
+                const ePos = emberPoints.geometry.attributes.position.array;
+                const eCol = emberPoints.geometry.attributes.color.array;
+                
+                for (let i = 0; i < emberCount; i++) {
+                    emberData[i].life += 0.006;
+                    if (emberData[i].life > 1) {
+                        emberData[i].life = 0;
+                        emberData[i].radius = Math.random() * 2.0;
+                        emberData[i].angle = Math.random() * Math.PI * 2;
+                        ePos[i*3+1] = emberData[i].baseY;
+                    }
+                    
+                    ePos[i*3] = Math.cos(emberData[i].angle) * emberData[i].radius + Math.sin(t * 0.5 + emberData[i].phase) * 0.005;
+                    ePos[i*3+1] += emberData[i].speed;
+                    
+                    if (ePos[i*3+1] > 2.0) {
+                        ePos[i*3+1] = -2.0;
+                    }
+                    
+                    const pulse = Math.sin(emberData[i].life * Math.PI);
+                    colObj.setHSL(0.05 + pulse * 0.05, 0.9, 0.2 + pulse * 0.6);
+                    eCol[i*3] = colObj.r;
+                    eCol[i*3+1] = colObj.g;
+                    eCol[i*3+2] = colObj.b;
+                }
+                emberPoints.geometry.attributes.position.needsUpdate = true;
+                emberPoints.geometry.attributes.color.needsUpdate = true;
+            };
+
+            return group;
+        }
+
+        function buildParadisePortal() {
+            const group = new THREE.Group();
+
+            // Shader paradiso con glassmorphism e colori celestiali
+            const paradiseMat = new THREE.ShaderMaterial({
+                uniforms: uniforms,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float u_time;
+                    varying vec2 vUv;
+
+                    float hash(vec2 p) {
+                        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+                    }
+
+                    float noise(vec2 p) {
+                        vec2 i = floor(p);
+                        vec2 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        return mix(
+                            mix(hash(i), hash(i + vec2(1.0,0.0)), f.x),
+                            mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0,1.0)), f.x),
+                            f.y
+                        );
+                    }
+
+                    float fbm(vec2 p) {
+                        float v = 0.0;
+                        float a = 0.5;
+                        for (int i = 0; i < 4; i++) {
+                            v += a * noise(p);
+                            p *= 2.0;
+                            a *= 0.5;
+                        }
+                        return v;
+                    }
+
+                    void main() {
+                        vec2 uv = vUv;
+                        float time = u_time;
+                        
+                        // Maschera circolare
+                        vec2 pos = uv - 0.5;
+                        float dist = length(pos);
+                        float mask = smoothstep(0.48, 0.0, dist);
+                        
+                        // Glassmorphism: effetto vetro satinato con distorsione
+                        vec2 glassUv = pos;
+                        glassUv.x += fbm(uv * 4.0 + time * 0.15) * 0.1;
+                        glassUv.y += fbm(uv * 4.0 + vec2(time * 0.12, 0.0)) * 0.1;
+                        
+                        // Pattern di luce attraverso il vetro
+                        float glassPattern = fbm(glassUv * 6.0 + time * 0.2);
+                        float glassPattern2 = fbm(glassUv * 3.0 - time * 0.1);
+                        
+                        // Raggi di luce dal centro
+                        float angle = atan(pos.y, pos.x);
+                        float rays = sin(angle * 8.0 + time * 0.5) * 0.5 + 0.5;
+                        rays = pow(rays, 3.0);
+                        rays *= smoothstep(0.45, 0.0, dist);
+                        
+                        // Bagliore centrale pulsante
+                        float glow = 1.0 - smoothstep(0.0, 0.3, dist);
+                        glow = pow(glow, 2.0);
+                        glow *= 0.5 + 0.5 * sin(time * 1.5);
+                        
+                        // Onde di luce celestiali
+                        float waves = sin(dist * 15.0 - time * 2.0) * 0.5 + 0.5;
+                        waves = pow(waves, 4.0);
+                        waves *= smoothstep(0.4, 0.1, dist);
+                        
+                        // Colori celestiali
+                        vec3 cWhite = vec3(1.0, 1.0, 1.0);
+                        vec3 cGold = vec3(1.0, 0.9, 0.6);
+                        vec3 cLightBlue = vec3(0.7, 0.9, 1.0);
+                        vec3 cPink = vec3(1.0, 0.8, 0.9);
+                        vec3 cLavender = vec3(0.9, 0.8, 1.0);
+                        vec3 cCyan = vec3(0.6, 0.95, 1.0);
+                        
+                        // Mix colore basato su pattern e distanza
+                        float t = glassPattern * 0.4 + glassPattern2 * 0.3 + glow * 0.3;
+                        vec3 color = mix(cLightBlue, cWhite, smoothstep(0.0, 0.5, t));
+                        color = mix(color, cGold, smoothstep(0.3, 0.7, t));
+                        color = mix(color, cPink, smoothstep(0.5, 0.8, glassPattern2));
+                        color = mix(color, cLavender, smoothstep(0.6, 0.9, glassPattern));
+                        
+                        // Aggiungi raggi di luce
+                        color += cGold * rays * 0.3;
+                        color += cWhite * glow * 0.5;
+                        color += cCyan * waves * 0.2;
+                        
+                        // Bordo glassmorphism
+                        float edge = smoothstep(0.48, 0.4, dist) * (1.0 - smoothstep(0.4, 0.35, dist));
+                        color += cWhite * edge * 0.6;
+                        
+                        // Riflesso superiore (effetto vetro)
+                        float reflection = smoothstep(0.1, 0.0, pos.y + 0.3) * smoothstep(0.4, 0.0, dist);
+                        color += cWhite * reflection * 0.3;
+                        
+                        float alpha = (glassPattern * 0.3 + glassPattern2 * 0.2 + glow * 0.4 + rays * 0.2 + waves * 0.15 + edge * 0.5 + reflection * 0.3) * mask;
+                        gl_FragColor = vec4(color, alpha * 0.85);
+                    }
+                `
+            });
+
+            const plane = new THREE.PlaneGeometry(5, 7, 1, 1);
+            const mesh = new THREE.Mesh(plane, paradiseMat);
+            group.add(mesh);
+
+            // Particelle di luce fluttuanti (polvere celeste)
+            const orbCount = 1500;
+            const orbGeo = new THREE.BufferGeometry();
+            const orbPos = new Float32Array(orbCount * 3);
+            const orbCol = new Float32Array(orbCount * 3);
+            const orbData = [];
+            
+            const cWhite = new THREE.Color(1.0, 1.0, 1.0);
+            const cGold = new THREE.Color(1.0, 0.9, 0.6);
+            const cLightBlue = new THREE.Color(0.7, 0.9, 1.0);
+            const cPink = new THREE.Color(1.0, 0.8, 0.9);
+            const cLavender = new THREE.Color(0.9, 0.8, 1.0);
+            
+            for (let i = 0; i < orbCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 2.0;
+                
+                orbPos[i*3] = Math.cos(angle) * radius;
+                orbPos[i*3+1] = Math.sin(angle) * radius * 0.6;
+                orbPos[i*3+2] = (Math.random() - 0.5) * 0.5;
+                
+                const rand = Math.random();
+                const c = rand > 0.7 ? cWhite : (rand > 0.5 ? cGold : (rand > 0.3 ? cLightBlue : (rand > 0.15 ? cPink : cLavender)));
+                orbCol[i*3] = c.r;
+                orbCol[i*3+1] = c.g;
+                orbCol[i*3+2] = c.b;
+                
+                orbData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: 0.002 + Math.random() * 0.005,
+                    drift: (Math.random() - 0.5) * 0.002,
+                    life: Math.random(),
+                    phase: Math.random() * 6.28,
+                    floatSpeed: 0.003 + Math.random() * 0.005
+                });
+            }
+            
+            orbGeo.setAttribute('position', new THREE.BufferAttribute(orbPos, 3));
+            orbGeo.setAttribute('color', new THREE.BufferAttribute(orbCol, 3));
+            
+            const orbMat = new THREE.PointsMaterial({
+                size: 0.05,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            
+            const orbPoints = new THREE.Points(orbGeo, orbMat);
+            group.add(orbPoints);
+
+            // Raggi di luce dal centro
+            const rayCount = 500;
+            const rayGeo = new THREE.BufferGeometry();
+            const rayPos = new Float32Array(rayCount * 3);
+            const rayCol = new Float32Array(rayCount * 3);
+            const rayData = [];
+            
+            for (let i = 0; i < rayCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 0.2;
+                
+                rayPos[i*3] = Math.cos(angle) * radius;
+                rayPos[i*3+1] = Math.sin(angle) * radius;
+                rayPos[i*3+2] = 0;
+                
+                const rand = Math.random();
+                const c = rand > 0.5 ? cGold : cWhite;
+                rayCol[i*3] = c.r;
+                rayCol[i*3+1] = c.g;
+                rayCol[i*3+2] = c.b;
+                
+                rayData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: 0.01 + Math.random() * 0.02,
+                    life: Math.random()
+                });
+            }
+            
+            rayGeo.setAttribute('position', new THREE.BufferAttribute(rayPos, 3));
+            rayGeo.setAttribute('color', new THREE.BufferAttribute(rayCol, 3));
+            
+            const rayMat = new THREE.PointsMaterial({
+                size: 0.08,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            
+            const rayPoints = new THREE.Points(rayGeo, rayMat);
+            group.add(rayPoints);
+
+            // Fontana di luce - particelle che schizzano verso l'alto e ricadono
+            const fountainCount = 600;
+            const fountainGeo = new THREE.BufferGeometry();
+            const fountainPos = new Float32Array(fountainCount * 3);
+            const fountainCol = new Float32Array(fountainCount * 3);
+            const fountainData = [];
+            
+            for (let i = 0; i < fountainCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 0.02 + Math.random() * 0.04;
+                
+                fountainPos[i*3] = 0;
+                fountainPos[i*3+1] = 0;
+                fountainPos[i*3+2] = 0;
+                
+                const rand = Math.random();
+                const c = rand > 0.5 ? cWhite : (rand > 0.25 ? cGold : (rand > 0.1 ? cLightBlue : cPink));
+                fountainCol[i*3] = c.r;
+                fountainCol[i*3+1] = c.g;
+                fountainCol[i*3+2] = c.b;
+                
+                fountainData.push({
+                    vx: Math.cos(angle) * speed * 0.5,
+                    vy: speed,
+                    vz: Math.sin(angle) * speed * 0.3,
+                    life: Math.random(),
+                    gravity: 0.0008
+                });
+            }
+            
+            fountainGeo.setAttribute('position', new THREE.BufferAttribute(fountainPos, 3));
+            fountainGeo.setAttribute('color', new THREE.BufferAttribute(fountainCol, 3));
+            
+            const fountainMat = new THREE.PointsMaterial({
+                size: 0.06,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            
+            const fountainPoints = new THREE.Points(fountainGeo, fountainMat);
+            group.add(fountainPoints);
+
+            // Anelli di luce espandenti
+            const ringCount = 300;
+            const ringGeo = new THREE.BufferGeometry();
+            const ringPos = new Float32Array(ringCount * 3);
+            const ringCol = new Float32Array(ringCount * 3);
+            const ringData = [];
+            
+            for (let i = 0; i < ringCount; i++) {
+                const ringIdx = Math.floor(i / 100);
+                const angle = (i % 100) / 100 * Math.PI * 2;
+                const radius = 0.1;
+                
+                ringPos[i*3] = Math.cos(angle) * radius;
+                ringPos[i*3+1] = Math.sin(angle) * radius * 0.6;
+                ringPos[i*3+2] = 0;
+                
+                const c = ringIdx === 0 ? cWhite : (ringIdx === 1 ? cGold : cLightBlue);
+                ringCol[i*3] = c.r;
+                ringCol[i*3+1] = c.g;
+                ringCol[i*3+2] = c.b;
+                
+                ringData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: 0.008 + ringIdx * 0.003,
+                    life: ringIdx * 0.33,
+                    ringIdx: ringIdx
+                });
+            }
+            
+            ringGeo.setAttribute('position', new THREE.BufferAttribute(ringPos, 3));
+            ringGeo.setAttribute('color', new THREE.BufferAttribute(ringCol, 3));
+            
+            const ringMat = new THREE.PointsMaterial({
+                size: 0.05,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            
+            const ringExpPoints = new THREE.Points(ringGeo, ringMat);
+            group.add(ringExpPoints);
+
+            group.userData.update = () => {
+                const t = uniforms.u_time.value;
+                const colObj = new THREE.Color();
+                
+                // Aggiorna orbs di luce
+                const oPos = orbPoints.geometry.attributes.position.array;
+                const oCol = orbPoints.geometry.attributes.color.array;
+                
+                for (let i = 0; i < orbCount; i++) {
+                    orbData[i].life += 0.003;
+                    if (orbData[i].life > 1) {
+                        orbData[i].life = 0;
+                        orbData[i].radius = Math.random() * 2.0;
+                        orbData[i].angle = Math.random() * Math.PI * 2;
+                    }
+                    
+                    orbData[i].angle += orbData[i].speed;
+                    orbData[i].radius += orbData[i].drift;
+                    
+                    if (orbData[i].radius > 2.2) orbData[i].radius = 0.1;
+                    if (orbData[i].radius < 0.1) orbData[i].radius = 2.2;
+                    
+                    oPos[i*3] = Math.cos(orbData[i].angle) * orbData[i].radius;
+                    oPos[i*3+1] = Math.sin(orbData[i].angle) * orbData[i].radius * 0.6 + Math.sin(t * orbData[i].floatSpeed + orbData[i].phase) * 0.1;
+                    
+                    const pulse = Math.sin(orbData[i].life * Math.PI);
+                    const hue = 0.55 + pulse * 0.15 + Math.sin(t * 0.2) * 0.05;
+                    colObj.setHSL(hue, 0.5, 0.7 + pulse * 0.2);
+                    oCol[i*3] = colObj.r;
+                    oCol[i*3+1] = colObj.g;
+                    oCol[i*3+2] = colObj.b;
+                }
+                orbPoints.geometry.attributes.position.needsUpdate = true;
+                orbPoints.geometry.attributes.color.needsUpdate = true;
+                
+                // Aggiorna raggi di luce
+                const rPos = rayPoints.geometry.attributes.position.array;
+                const rCol = rayPoints.geometry.attributes.color.array;
+                
+                for (let i = 0; i < rayCount; i++) {
+                    rayData[i].life += 0.01;
+                    if (rayData[i].life > 1) {
+                        rayData[i].life = 0;
+                        rayData[i].radius = Math.random() * 0.2;
+                        rayData[i].angle = Math.random() * Math.PI * 2;
+                    }
+                    
+                    rayData[i].radius += rayData[i].speed;
+                    rayData[i].angle += 0.005;
+                    
+                    rPos[i*3] = Math.cos(rayData[i].angle) * rayData[i].radius;
+                    rPos[i*3+1] = Math.sin(rayData[i].angle) * rayData[i].radius;
+                    
+                    const pulse = Math.sin(rayData[i].life * Math.PI);
+                    colObj.setHSL(0.12 + pulse * 0.05, 0.6, 0.8 + pulse * 0.2);
+                    rCol[i*3] = colObj.r;
+                    rCol[i*3+1] = colObj.g;
+                    rCol[i*3+2] = colObj.b;
+                }
+                rayPoints.geometry.attributes.position.needsUpdate = true;
+                rayPoints.geometry.attributes.color.needsUpdate = true;
+                
+                // Aggiorna fontana di luce
+                const fPos = fountainPoints.geometry.attributes.position.array;
+                const fCol = fountainPoints.geometry.attributes.color.array;
+                
+                for (let i = 0; i < fountainCount; i++) {
+                    fountainData[i].life += 0.008;
+                    
+                    if (fountainData[i].life > 1) {
+                        fountainData[i].life = 0;
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = 0.02 + Math.random() * 0.04;
+                        fountainData[i].vx = Math.cos(angle) * speed * 0.5;
+                        fountainData[i].vy = speed;
+                        fountainData[i].vz = Math.sin(angle) * speed * 0.3;
+                        fPos[i*3] = 0;
+                        fPos[i*3+1] = 0;
+                        fPos[i*3+2] = 0;
+                    }
+                    
+                    fountainData[i].vy -= fountainData[i].gravity;
+                    fPos[i*3] += fountainData[i].vx;
+                    fPos[i*3+1] += fountainData[i].vy;
+                    fPos[i*3+2] += fountainData[i].vz;
+                    
+                    const pulse = Math.sin(fountainData[i].life * Math.PI);
+                    const hue = 0.55 + pulse * 0.15;
+                    colObj.setHSL(hue, 0.5, 0.6 + pulse * 0.3);
+                    fCol[i*3] = colObj.r;
+                    fCol[i*3+1] = colObj.g;
+                    fCol[i*3+2] = colObj.b;
+                }
+                fountainPoints.geometry.attributes.position.needsUpdate = true;
+                fountainPoints.geometry.attributes.color.needsUpdate = true;
+                
+                // Aggiorna anelli espandenti
+                const rePos = ringExpPoints.geometry.attributes.position.array;
+                const reCol = ringExpPoints.geometry.attributes.color.array;
+                
+                for (let i = 0; i < ringCount; i++) {
+                    ringData[i].life += 0.005;
+                    if (ringData[i].life > 1) {
+                        ringData[i].life = 0;
+                    }
+                    
+                    ringData[i].radius += ringData[i].speed;
+                    if (ringData[i].radius > 2.5) {
+                        ringData[i].radius = 0.1;
+                    }
+                    
+                    rePos[i*3] = Math.cos(ringData[i].angle) * ringData[i].radius;
+                    rePos[i*3+1] = Math.sin(ringData[i].angle) * ringData[i].radius * 0.6;
+                    
+                    const pulse = Math.sin(ringData[i].life * Math.PI);
+                    const hue = ringData[i].ringIdx === 0 ? 0.0 : (ringData[i].ringIdx === 1 ? 0.12 : 0.55);
+                    colObj.setHSL(hue, 0.4, 0.7 + pulse * 0.3);
+                    reCol[i*3] = colObj.r;
+                    reCol[i*3+1] = colObj.g;
+                    reCol[i*3+2] = colObj.b;
+                }
+                ringExpPoints.geometry.attributes.position.needsUpdate = true;
+                ringExpPoints.geometry.attributes.color.needsUpdate = true;
+            };
+
+            return group;
+        }
+
+        function buildAuroraPortal() {
+            const group = new THREE.Group();
+
+            // Shader aurora boreale con cortine di luce fluide
+            const auroraMat = new THREE.ShaderMaterial({
+                uniforms: uniforms,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float u_time;
+                    varying vec2 vUv;
+
+                    float hash(vec2 p) {
+                        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+                    }
+
+                    float noise(vec2 p) {
+                        vec2 i = floor(p);
+                        vec2 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        return mix(
+                            mix(hash(i), hash(i + vec2(1.0,0.0)), f.x),
+                            mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0,1.0)), f.x),
+                            f.y
+                        );
+                    }
+
+                    float fbm(vec2 p) {
+                        float v = 0.0;
+                        float a = 0.5;
+                        for (int i = 0; i < 5; i++) {
+                            v += a * noise(p);
+                            p *= 2.0;
+                            a *= 0.5;
+                        }
+                        return v;
+                    }
+
+                    void main() {
+                        vec2 uv = vUv;
+                        float time = u_time;
+                        
+                        // Maschera circolare
+                        vec2 pos = uv - 0.5;
+                        float dist = length(pos);
+                        float mask = smoothstep(0.48, 0.0, dist);
+                        
+                        // Cortine di luce verticali che fluiscono
+                        // Onda principale che si muove verticalmente
+                        float curtainWave = fbm(vec2(uv.x * 3.0 + time * 0.15, uv.y * 2.0 - time * 0.1));
+                        
+                        // Seconda onda con frequenza diversa
+                        float curtain2 = fbm(vec2(uv.x * 5.0 - time * 0.08, uv.y * 3.0 + time * 0.12));
+                        
+                        // Strisce verticali di luce (cortine)
+                        float stripes = sin(uv.x * 15.0 + curtainWave * 5.0 + time * 0.3) * 0.5 + 0.5;
+                        stripes = pow(stripes, 2.0);
+                        
+                        // Flusso verticale (le cortine pendono dall'alto)
+                        float verticalFlow = 1.0 - smoothstep(0.3, 0.7, uv.y);
+                        verticalFlow = pow(verticalFlow, 1.5);
+                        
+                        // Intensità della cortina
+                        float curtainIntensity = curtainWave * 0.5 + curtain2 * 0.3 + stripes * 0.2;
+                        curtainIntensity *= verticalFlow;
+                        curtainIntensity *= smoothstep(0.0, 0.2, uv.y) * smoothstep(1.0, 0.8, uv.y);
+                        
+                        // Bagliore pulsante al centro
+                        float glow = 1.0 - smoothstep(0.0, 0.25, dist);
+                        glow = pow(glow, 2.0);
+                        glow *= 0.5 + 0.5 * sin(time * 1.2);
+                        
+                        // Onde di luce orizzontali
+                        float waves = sin(dist * 12.0 - time * 1.5) * 0.5 + 0.5;
+                        waves = pow(waves, 3.0);
+                        waves *= smoothstep(0.4, 0.1, dist);
+                        
+                        // Scintillio stellare
+                        float sparkle = pow(max(0.0, sin(time * 8.0 + uv.x * 50.0)), 30.0);
+                        sparkle += pow(max(0.0, sin(time * 6.0 + uv.y * 40.0)), 25.0);
+                        sparkle *= smoothstep(0.4, 0.0, dist);
+                        
+                        // Colori aurora: verde, turchese, viola, rosa, bianco
+                        vec3 cGreen = vec3(0.2, 1.0, 0.4);
+                        vec3 cTeal = vec3(0.2, 0.9, 0.8);
+                        vec3 cPurple = vec3(0.6, 0.3, 1.0);
+                        vec3 cPink = vec3(0.9, 0.4, 0.8);
+                        vec3 cWhite = vec3(0.9, 1.0, 0.95);
+                        vec3 cBlue = vec3(0.3, 0.5, 1.0);
+                        
+                        // Mix colore basato sulle cortine
+                        float t = curtainIntensity;
+                        vec3 color = mix(cBlue, cGreen, smoothstep(0.0, 0.4, t));
+                        color = mix(color, cTeal, smoothstep(0.2, 0.5, t));
+                        color = mix(color, cPurple, smoothstep(0.3, 0.6, curtain2));
+                        color = mix(color, cPink, smoothstep(0.5, 0.8, curtainWave));
+                        color = mix(color, cWhite, smoothstep(0.7, 1.0, t));
+                        
+                        // Aggiungi bagliore e onde
+                        color += cGreen * glow * 0.4;
+                        color += cTeal * waves * 0.3;
+                        color += cWhite * sparkle * 0.5;
+                        
+                        // Bordo luminoso
+                        float edge = smoothstep(0.48, 0.4, dist) * (1.0 - smoothstep(0.4, 0.35, dist));
+                        color += cTeal * edge * 0.4;
+                        
+                        float alpha = (curtainIntensity * 0.7 + glow * 0.3 + waves * 0.2 + sparkle * 0.3 + edge * 0.4) * mask;
+                        gl_FragColor = vec4(color, alpha * 0.9);
+                    }
+                `
+            });
+
+            const plane = new THREE.PlaneGeometry(5, 7, 1, 1);
+            const mesh = new THREE.Mesh(plane, auroraMat);
+            group.add(mesh);
+
+            // Particelle di polvere luminosa
+            const dustCount = 1200;
+            const dustGeo = new THREE.BufferGeometry();
+            const dustPos = new Float32Array(dustCount * 3);
+            const dustCol = new Float32Array(dustCount * 3);
+            const dustData = [];
+            
+            const cGreen = new THREE.Color(0.2, 1.0, 0.4);
+            const cTeal = new THREE.Color(0.2, 0.9, 0.8);
+            const cPurple = new THREE.Color(0.6, 0.3, 1.0);
+            const cPink = new THREE.Color(0.9, 0.4, 0.8);
+            const cWhite = new THREE.Color(0.9, 1.0, 0.95);
+            
+            for (let i = 0; i < dustCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 2.0;
+                
+                dustPos[i*3] = Math.cos(angle) * radius;
+                dustPos[i*3+1] = Math.sin(angle) * radius * 0.7;
+                dustPos[i*3+2] = (Math.random() - 0.5) * 0.4;
+                
+                const rand = Math.random();
+                const c = rand > 0.6 ? cWhite : (rand > 0.4 ? cGreen : (rand > 0.2 ? cTeal : (rand > 0.1 ? cPurple : cPink)));
+                dustCol[i*3] = c.r;
+                dustCol[i*3+1] = c.g;
+                dustCol[i*3+2] = c.b;
+                
+                dustData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: 0.001 + Math.random() * 0.004,
+                    drift: (Math.random() - 0.5) * 0.002,
+                    life: Math.random(),
+                    phase: Math.random() * 6.28,
+                    floatSpeed: 0.002 + Math.random() * 0.004
+                });
+            }
+            
+            dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+            dustGeo.setAttribute('color', new THREE.BufferAttribute(dustCol, 3));
+            
+            const dustMat = new THREE.PointsMaterial({
+                size: 0.04,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.7,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            
+            const dustPoints = new THREE.Points(dustGeo, dustMat);
+            group.add(dustPoints);
+
+            // Scintille luminose che cadono
+            const sparkCount = 400;
+            const sparkGeo = new THREE.BufferGeometry();
+            const sparkPos = new Float32Array(sparkCount * 3);
+            const sparkCol = new Float32Array(sparkCount * 3);
+            const sparkData = [];
+            
+            for (let i = 0; i < sparkCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 1.5;
+                
+                sparkPos[i*3] = Math.cos(angle) * radius;
+                sparkPos[i*3+1] = Math.sin(angle) * radius * 0.7 + 1.0;
+                sparkPos[i*3+2] = (Math.random() - 0.5) * 0.2;
+                
+                const rand = Math.random();
+                const c = rand > 0.5 ? cGreen : (rand > 0.25 ? cTeal : cWhite);
+                sparkCol[i*3] = c.r;
+                sparkCol[i*3+1] = c.g;
+                sparkCol[i*3+2] = c.b;
+                
+                sparkData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: 0.003 + Math.random() * 0.008,
+                    life: Math.random(),
+                    phase: Math.random() * 6.28
+                });
+            }
+            
+            sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+            sparkGeo.setAttribute('color', new THREE.BufferAttribute(sparkCol, 3));
+            
+            const sparkMat = new THREE.PointsMaterial({
+                size: 0.05,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            
+            const sparkPoints = new THREE.Points(sparkGeo, sparkMat);
+            group.add(sparkPoints);
+
+            group.userData.update = () => {
+                const t = uniforms.u_time.value;
+                const colObj = new THREE.Color();
+                
+                // Aggiorna polvere luminosa
+                const dPos = dustPoints.geometry.attributes.position.array;
+                const dCol = dustPoints.geometry.attributes.color.array;
+                
+                for (let i = 0; i < dustCount; i++) {
+                    dustData[i].life += 0.002;
+                    if (dustData[i].life > 1) {
+                        dustData[i].life = 0;
+                        dustData[i].radius = Math.random() * 2.0;
+                        dustData[i].angle = Math.random() * Math.PI * 2;
+                    }
+                    
+                    dustData[i].angle += dustData[i].speed;
+                    dustData[i].radius += dustData[i].drift;
+                    
+                    if (dustData[i].radius > 2.2) dustData[i].radius = 0.1;
+                    if (dustData[i].radius < 0.1) dustData[i].radius = 2.2;
+                    
+                    dPos[i*3] = Math.cos(dustData[i].angle) * dustData[i].radius;
+                    dPos[i*3+1] = Math.sin(dustData[i].angle) * dustData[i].radius * 0.7 + Math.sin(t * dustData[i].floatSpeed + dustData[i].phase) * 0.08;
+                    
+                    const pulse = Math.sin(dustData[i].life * Math.PI);
+                    const hue = 0.35 + pulse * 0.2 + Math.sin(t * 0.15) * 0.1;
+                    colObj.setHSL(hue, 0.7, 0.6 + pulse * 0.3);
+                    dCol[i*3] = colObj.r;
+                    dCol[i*3+1] = colObj.g;
+                    dCol[i*3+2] = colObj.b;
+                }
+                dustPoints.geometry.attributes.position.needsUpdate = true;
+                dustPoints.geometry.attributes.color.needsUpdate = true;
+                
+                // Aggiorna scintille
+                const sPos = sparkPoints.geometry.attributes.position.array;
+                const sCol = sparkPoints.geometry.attributes.color.array;
+                
+                for (let i = 0; i < sparkCount; i++) {
+                    sparkData[i].life += 0.005;
+                    if (sparkData[i].life > 1) {
+                        sparkData[i].life = 0;
+                        sparkData[i].radius = Math.random() * 1.5;
+                        sparkData[i].angle = Math.random() * Math.PI * 2;
+                        sPos[i*3+1] = Math.sin(sparkData[i].angle) * sparkData[i].radius * 0.7 + 1.0;
+                    }
+                    
+                    sPos[i*3] = Math.cos(sparkData[i].angle) * sparkData[i].radius + Math.sin(t * 0.3 + sparkData[i].phase) * 0.003;
+                    sPos[i*3+1] -= sparkData[i].speed;
+                    
+                    if (sPos[i*3+1] < -2.0) {
+                        sPos[i*3+1] = 2.0;
+                    }
+                    
+                    const pulse = Math.sin(sparkData[i].life * Math.PI);
+                    colObj.setHSL(0.35 + pulse * 0.15, 0.8, 0.5 + pulse * 0.4);
+                    sCol[i*3] = colObj.r;
+                    sCol[i*3+1] = colObj.g;
+                    sCol[i*3+2] = colObj.b;
+                }
+                sparkPoints.geometry.attributes.position.needsUpdate = true;
+                sparkPoints.geometry.attributes.color.needsUpdate = true;
+            };
+
+            return group;
+        }
+
         // --- SWITCHER PORTALI ---
         function switchPortal(type) {
             gsap.to(currentGroup.scale, {
@@ -1478,6 +2604,9 @@
                     else if (type === 'water') currentGroup = buildWaterPortal();
                     else if (type === 'fire') currentGroup = buildFirePortal();
                     else if (type === 'alien') currentGroup = buildAlienPortal();
+                    else if (type === 'dragon') currentGroup = buildDragonPortal();
+                    else if (type === 'paradise') currentGroup = buildParadisePortal();
+                    else if (type === 'aurora') currentGroup = buildAuroraPortal();
 
                     currentGroup.position.y = -1.5;
                     currentGroup.scale.set(0, 0, 0);

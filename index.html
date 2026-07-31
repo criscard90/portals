@@ -492,25 +492,29 @@
 
         function buildCosmicVortex() {
             const group = new THREE.Group();
-            const particleCount = 12000;
+            const particleCount = 15000;
             const geo = new THREE.BufferGeometry();
             const positions = new Float32Array(particleCount * 3);
             const colors = new Float32Array(particleCount * 3);
             const pData = [];
 
             for (let i = 0; i < particleCount; i++) {
-                const dist = Math.random() * 3.5 + 0.3;
                 const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * 1.2 + 0.8; // anello che non copre il buco nero
+                const z = (Math.random() - 0.5) * -0.5;
                 
+                // Disco frontale: particelle sul piano X-Y con profondità Z
                 positions[i * 3] = Math.cos(angle) * dist;
-                positions[i * 3 + 1] = Math.sin(angle) * dist * 0.7 - 1.5;
-                positions[i * 3 + 2] = (Math.random() - 0.5) * (3.0 - dist * 0.4);
+                positions[i * 3 + 1] = Math.sin(angle) * dist * 0.6;
+                positions[i * 3 + 2] = z;
 
                 pData.push({
                     dist: dist,
                     angle: angle,
-                    baseHue: (dist * 0.12) % 1.0,
-                    speed: 0.012
+                    z: z,
+                    baseZ: z,
+                    baseHue: (dist * 0.15) % 1.0,
+                    speed: 0.012 + Math.random() * 0.008
                 });
             }
 
@@ -518,11 +522,11 @@
             geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
             const mat = new THREE.PointsMaterial({
-                size: 0.065,
+                size: 0.04,
                 vertexColors: true,
                 map: particleTexture,
                 transparent: true,
-                opacity: 0.85,
+                opacity: 0.9,
                 blending: THREE.AdditiveBlending,
                 depthWrite: false
             });
@@ -530,26 +534,49 @@
             const points = new THREE.Points(geo, mat);
             group.add(points);
 
+            // Buco nero centrale (cerchio nero)
+            const holeGeo = new THREE.CircleGeometry(0.7, 32);
+            const holeMat = new THREE.MeshBasicMaterial({
+                color: 0x000000,
+                transparent: true,
+                opacity: 0.9,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+            const holeMesh = new THREE.Mesh(holeGeo, holeMat);
+            holeMesh.position.z = -0.5;
+            group.add(holeMesh);
+
             group.userData.update = () => {
                 const posArr = points.geometry.attributes.position.array;
                 const colArr = points.geometry.attributes.color.array;
-                const time = uniforms.u_time.value * 0.1;
+                const time = uniforms.u_time.value;
 
                 const colorObj = new THREE.Color();
 
                 for (let i = 0; i < particleCount; i++) {
                     pData[i].angle += pData[i].speed;
-                    pData[i].dist -= 0.002;
-
-                    if (pData[i].dist <= 0.3) {
-                        pData[i].dist = 3.6;
+                    if (pData[i].angle > Math.PI * 2) {
+                        pData[i].angle -= Math.PI * 2;
                     }
 
-                    posArr[i * 3] = Math.cos(pData[i].angle) * pData[i].dist;
-                    posArr[i * 3 + 1] = Math.sin(pData[i].angle) * pData[i].dist * 0.7 - 1.5;
+                    // Ruota attorno al centro
+                    const dist = pData[i].dist;
+                    const angle = pData[i].angle;
+                    
+                    posArr[i * 3] = Math.cos(angle) * dist;
+                    posArr[i * 3 + 1] = Math.sin(angle) * dist * 0.6;
+                    
+                    // Movimento Z verso la camera (effetto risucchio)
+                    pData[i].z += 0.02;
+                    if (pData[i].z > 0) {
+                        pData[i].z = pData[i].baseZ;
+                    }
+                    posArr[i * 3 + 2] = pData[i].z;
 
-                    const currentHue = (0.55 + pData[i].baseHue + Math.sin(time + pData[i].dist * 0.5) * 0.2) % 1.0;
-                    colorObj.setHSL(currentHue, 0.85, 0.55);
+                    // Colore arcobaleno in base alla distanza
+                    const hue = (dist * 0.15 + time * 0.05) % 1.0;
+                    colorObj.setHSL(hue, 0.9, 0.5 + pData[i].z * 0.2);
 
                     colArr[i * 3] = colorObj.r;
                     colArr[i * 3 + 1] = colorObj.g;
@@ -722,28 +749,27 @@
         function buildWormhole() {
             const group = new THREE.Group();
 
-            // Hyperdrive style: blue/white streaks radiating from center
-            const streakCount = 6000;
+            // Star Wars hyperdrive: tunnel of radial streaks
+            const streakCount = 8000;
             const geo = new THREE.BufferGeometry();
             const positions = new Float32Array(streakCount * 3);
             const colors = new Float32Array(streakCount * 3);
             const pData = [];
 
-            const cBlue = new THREE.Color(0.0, 0.4, 1.0);
+            const cBlue = new THREE.Color(0.2, 0.6, 1.0);
             const cWhite = new THREE.Color(1.0, 1.0, 1.0);
-            const cLightBlue = new THREE.Color(0.4, 0.7, 1.0);
+            const cCyan = new THREE.Color(0.4, 0.9, 1.0);
 
             for (let i = 0; i < streakCount; i++) {
                 const angle = Math.random() * Math.PI * 2;
-                const radius = Math.random() * 3.5 + 0.1;
-                const length = Math.random() * 1.5 + 0.5;
+                const radius = Math.random() * 3.2 + 0.1;
                 
                 positions[i * 3] = Math.cos(angle) * radius;
                 positions[i * 3 + 1] = Math.sin(angle) * radius * 0.7 - 1.5;
-                positions[i * 3 + 2] = (Math.random() - 0.5) * 4;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
 
                 const rand = Math.random();
-                const c = rand > 0.8 ? cWhite : (rand > 0.4 ? cLightBlue : cBlue);
+                const c = rand > 0.85 ? cWhite : (rand > 0.5 ? cCyan : cBlue);
                 colors[i * 3] = c.r;
                 colors[i * 3 + 1] = c.g;
                 colors[i * 3 + 2] = c.b;
@@ -751,8 +777,7 @@
                 pData.push({
                     angle: angle,
                     radius: radius,
-                    length: length,
-                    speed: Math.random() * 0.8 + 0.4,
+                    speed: Math.random() * 1.5 + 0.8,
                     baseZ: positions[i * 3 + 2]
                 });
             }
@@ -761,7 +786,7 @@
             geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
             const mat = new THREE.PointsMaterial({
-                size: 0.08,
+                size: 0.06,
                 vertexColors: true,
                 map: particleTexture,
                 transparent: true,
@@ -773,14 +798,53 @@
             const streaks = new THREE.Points(geo, mat);
             group.add(streaks);
 
+            // Central glow
+            const glowGeo = new THREE.PlaneGeometry(8, 5);
+            const glowMat = new THREE.ShaderMaterial({
+                uniforms: uniforms,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float u_time;
+                    varying vec2 vUv;
+                    
+                    void main() {
+                        vec2 pos = vUv - 0.5;
+                        float dist = length(pos);
+                        
+                        float glow = smoothstep(0.5, 0.0, dist);
+                        glow = pow(glow, 2.0);
+                        
+                        float pulse = 0.5 + 0.5 * sin(u_time * 2.0);
+                        glow *= 0.3 + pulse * 0.2;
+                        
+                        vec3 color = vec3(0.3, 0.7, 1.0);
+                        float alpha = glow * 0.4;
+                        
+                        gl_FragColor = vec4(color, alpha);
+                    }
+                `
+            });
+            const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+            glowMesh.position.z = -2;
+            group.add(glowMesh);
+
             group.userData.update = () => {
                 const posArr = streaks.geometry.attributes.position.array;
                 const t = uniforms.u_time.value;
 
                 for (let i = 0; i < streakCount; i++) {
-                    pData[i].radius += pData[i].speed * 0.02;
+                    pData[i].radius += pData[i].speed * 0.012;
                     
-                    if (pData[i].radius > 3.6) {
+                    if (pData[i].radius > 3.3) {
                         pData[i].radius = 0.1;
                         pData[i].angle = Math.random() * Math.PI * 2;
                     }
@@ -790,7 +854,12 @@
                     
                     posArr[i * 3] = Math.cos(a) * r;
                     posArr[i * 3 + 1] = Math.sin(a) * r * 0.7 - 1.5;
-                    posArr[i * 3 + 2] = pData[i].baseZ + Math.sin(t + i * 0.1) * 0.2;
+                    
+                    // Move Z forward to simulate flying through tunnel
+                    posArr[i * 3 + 2] += pData[i].speed;
+                    if (posArr[i * 3 + 2] > 30) {
+                        posArr[i * 3 + 2] = -60;
+                    }
                 }
                 streaks.geometry.attributes.position.needsUpdate = true;
             };

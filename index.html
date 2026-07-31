@@ -84,7 +84,7 @@
         }
 
         #tap-toast {
-            top: 80px;
+            top: 130px;
         }
 
         #swipe-toast {
@@ -99,24 +99,111 @@
         /* UI Selector Float */
         #ui-controls {
             position: absolute;
-            top: 16px;
+            top: 10px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
             display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
             background: rgba(10, 10, 16, 0.85);
-            padding: 8px 14px;
-            border-radius: 30px;
+            padding: 10px 16px;
+            border-radius: 20px;
             backdrop-filter: blur(15px);
             border: 1px solid rgba(255, 255, 255, 0.15);
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
             transition: opacity 0.4s ease, transform 0.4s ease;
+            min-width: 240px;
         }
 
         #ui-controls.hidden {
             opacity: 0;
             transform: translate(-50%, -30px);
             pointer-events: none;
+        }
+
+        .controls-main {
+            display: flex;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .controls-carousel-toggle-row {
+            display: flex;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .controls-carousel {
+            display: none;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            justify-content: center;
+            padding-top: 6px;
+        }
+
+        .controls-carousel.active {
+            display: flex;
+        }
+
+        .carousel-toggle {
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+        }
+
+        .carousel-option {
+            color: #888;
+            font-size: 11px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+            transition: color 0.3s;
+        }
+
+        .carousel-option.active {
+            color: #fff;
+        }
+
+        #duration-slider {
+            width: 60px;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        #duration-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        #duration-value {
+            color: #fff;
+            font-size: 11px;
+            min-width: 24px;
+            text-align: center;
+        }
+
+        .carousel-toggle input, .carousel-option input {
+            accent-color: #4af;
+            cursor: pointer;
         }
 
         select {
@@ -151,21 +238,37 @@
     <div id="swipe-toast">← Swipe to switch portals →</div>
 
     <div id="ui-controls">
-        <select id="portal-select">
-            <option value="nether">Nether</option>
-            <option value="doctor">Spark</option>
-            <option value="cosmic" selected>Vortex</option>
-            <option value="lightning">Storm</option>
-            <option value="wormhole">Hyperdrive</option>
-            <option value="quantum">Quantum</option>
-            <option value="smoke">Mist</option>
-            <option value="water">Aqua</option>
-            <option value="fire">Inferno</option>
-            <option value="alien">Xenon</option>
-            <option value="dragon">Dragon</option>
-            <option value="paradise">Paradise</option>
-            <option value="aurora">Aurora</option>
-        </select>
+        <div class="controls-main">
+            <select id="portal-select">
+                <option value="nether">Nether</option>
+                <option value="doctor">Spark</option>
+                <option value="cosmic" selected>Vortex</option>
+                <option value="lightning">Storm</option>
+                <option value="wormhole">Hyperdrive</option>
+                <option value="quantum">Quantum</option>
+                <option value="smoke">Mist</option>
+                <option value="water">Aqua</option>
+                <option value="fire">Inferno</option>
+                <option value="alien">Xenon</option>
+                <option value="dragon">Dragon</option>
+                <option value="paradise">Paradise</option>
+                <option value="aurora">Aurora</option>
+            </select>
+        </div>
+        <div class="controls-carousel-toggle-row">
+            <label class="carousel-toggle">
+                <input type="checkbox" id="carousel-toggle"> Carousel
+            </label>
+        </div>
+        <div class="controls-carousel">
+            <label class="carousel-option" id="random-label">
+                <input type="checkbox" id="random-toggle" disabled> Random
+            </label>
+            <label class="carousel-option">
+                <span id="duration-value">15s</span>
+                <input type="range" id="duration-slider" min="10" max="30" value="15" disabled>
+            </label>
+        </div>
     </div>
 
     <div id="webgl-container"></div>
@@ -2642,6 +2745,53 @@
         }
 
         animate();
+
+        // --- CAROUSEL LOGIC ---
+        let carouselTimer = null;
+        const carouselToggle = document.getElementById('carousel-toggle');
+        const randomToggle = document.getElementById('random-toggle');
+        const durationSlider = document.getElementById('duration-slider');
+        const durationValue = document.getElementById('duration-value');
+        const randomLabel = document.getElementById('random-label');
+
+        carouselToggle.addEventListener('change', () => {
+            const enabled = carouselToggle.checked;
+            randomToggle.disabled = !enabled;
+            durationSlider.disabled = !enabled;
+            document.querySelector('.controls-carousel').classList.toggle('active', enabled);
+            if (enabled) startCarousel();
+            else stopCarousel();
+        });
+
+        randomToggle.addEventListener('change', () => {
+            randomLabel.classList.toggle('active', randomToggle.checked);
+        });
+
+        durationSlider.addEventListener('input', () => {
+            durationValue.textContent = durationSlider.value + 's';
+            if (carouselToggle.checked) { stopCarousel(); startCarousel(); }
+        });
+
+        function startCarousel() {
+            const duration = parseInt(durationSlider.value) * 1000;
+            carouselTimer = setInterval(() => {
+                const options = Array.from(select.options);
+                const currentIndex = select.selectedIndex;
+                let newIndex;
+                if (randomToggle.checked) {
+                    do { newIndex = Math.floor(Math.random() * options.length); }
+                    while (newIndex === currentIndex && options.length > 1);
+                } else {
+                    newIndex = (currentIndex + 1) % options.length;
+                }
+                select.selectedIndex = newIndex;
+                switchPortal(options[newIndex].value);
+            }, duration);
+        }
+
+        function stopCarousel() {
+            if (carouselTimer) { clearInterval(carouselTimer); carouselTimer = null; }
+        }
 
         // --- SERVICE WORKER REGISTRATION PWA ---
         if ('serviceWorker' in navigator) {

@@ -499,11 +499,11 @@
             const pData = [];
 
             for (let i = 0; i < particleCount; i++) {
-                const dist = Math.random() * 4.8 + 0.3;
+                const dist = Math.random() * 3.5 + 0.3;
                 const angle = Math.random() * Math.PI * 2;
                 
                 positions[i * 3] = Math.cos(angle) * dist;
-                positions[i * 3 + 1] = Math.sin(angle) * dist;
+                positions[i * 3 + 1] = Math.sin(angle) * dist * 0.7 - 1.5;
                 positions[i * 3 + 2] = (Math.random() - 0.5) * (3.0 - dist * 0.4);
 
                 pData.push({
@@ -542,11 +542,11 @@
                     pData[i].dist -= 0.002;
 
                     if (pData[i].dist <= 0.3) {
-                        pData[i].dist = 5.1;
+                        pData[i].dist = 3.6;
                     }
 
                     posArr[i * 3] = Math.cos(pData[i].angle) * pData[i].dist;
-                    posArr[i * 3 + 1] = Math.sin(pData[i].angle) * pData[i].dist;
+                    posArr[i * 3 + 1] = Math.sin(pData[i].angle) * pData[i].dist * 0.7 - 1.5;
 
                     const currentHue = (0.55 + pData[i].baseHue + Math.sin(time + pData[i].dist * 0.5) * 0.2) % 1.0;
                     colorObj.setHSL(currentHue, 0.85, 0.55);
@@ -722,84 +722,77 @@
         function buildWormhole() {
             const group = new THREE.Group();
 
-            const tunnelGeo = new THREE.CylinderGeometry(3.5, 3.5, 80, 32, 120, true);
-            const tunnelMat = new THREE.ShaderMaterial({
-                uniforms: uniforms,
-                transparent: true,
-                side: THREE.BackSide,
-                blending: THREE.AdditiveBlending,
-                vertexShader: `
-                    varying vec2 vUv;
-                    void main() {
-                        vUv = uv;
-                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                    }
-                `,
-                fragmentShader: `
-                    uniform float u_time;
-                    varying vec2 vUv;
+            // Hyperdrive style: blue/white streaks radiating from center
+            const streakCount = 6000;
+            const geo = new THREE.BufferGeometry();
+            const positions = new Float32Array(streakCount * 3);
+            const colors = new Float32Array(streakCount * 3);
+            const pData = [];
 
-                    void main() {
-                        float speed = u_time * 18.0;
-                        float streak = sin(vUv.x * 80.0) * 0.5 + 0.5;
-                        float pulse = sin(vUv.y * 60.0 - speed) * 0.5 + 0.5;
-                        
-                        vec3 col1 = vec3(0.0, 0.8, 1.0);
-                        vec3 col2 = vec3(0.6, 0.0, 1.0);
-                        
-                        vec3 finalCol = mix(col1, col2, pulse);
-                        float alpha = smoothstep(0.0, 0.15, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
+            const cBlue = new THREE.Color(0.0, 0.4, 1.0);
+            const cWhite = new THREE.Color(1.0, 1.0, 1.0);
+            const cLightBlue = new THREE.Color(0.4, 0.7, 1.0);
 
-                        gl_FragColor = vec4(finalCol, (streak * 0.8 + pulse * 0.4) * alpha);
-                    }
-                `
-            });
-
-            const tunnel = new THREE.Mesh(tunnelGeo, tunnelMat);
-            tunnel.rotation.x = Math.PI / 2;
-            group.add(tunnel);
-
-            const count = 4000;
-            const streakGeo = new THREE.BufferGeometry();
-            const positions = new Float32Array(count * 3);
-            const speeds = [];
-
-            for (let i = 0; i < count; i++) {
+            for (let i = 0; i < streakCount; i++) {
                 const angle = Math.random() * Math.PI * 2;
-                const radius = Math.random() * 3.3 + 0.1;
+                const radius = Math.random() * 3.5 + 0.1;
+                const length = Math.random() * 1.5 + 0.5;
                 
                 positions[i * 3] = Math.cos(angle) * radius;
-                positions[i * 3 + 1] = Math.sin(angle) * radius;
-                positions[i * 3 + 2] = (Math.random() - 0.5) * 80;
+                positions[i * 3 + 1] = Math.sin(angle) * radius * 0.7 - 1.5;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 4;
 
-                speeds.push(Math.random() * 1.2 + 0.8);
+                const rand = Math.random();
+                const c = rand > 0.8 ? cWhite : (rand > 0.4 ? cLightBlue : cBlue);
+                colors[i * 3] = c.r;
+                colors[i * 3 + 1] = c.g;
+                colors[i * 3 + 2] = c.b;
+
+                pData.push({
+                    angle: angle,
+                    radius: radius,
+                    length: length,
+                    speed: Math.random() * 0.8 + 0.4,
+                    baseZ: positions[i * 3 + 2]
+                });
             }
 
-            streakGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-            const streakMat = new THREE.PointsMaterial({
-                size: 0.12,
-                color: 0x00ffff,
+            const mat = new THREE.PointsMaterial({
+                size: 0.08,
+                vertexColors: true,
+                map: particleTexture,
                 transparent: true,
                 opacity: 0.95,
-                map: particleTexture,
                 blending: THREE.AdditiveBlending,
                 depthWrite: false
             });
 
-            const warpParticles = new THREE.Points(streakGeo, streakMat);
-            group.add(warpParticles);
+            const streaks = new THREE.Points(geo, mat);
+            group.add(streaks);
 
             group.userData.update = () => {
-                const posArr = warpParticles.geometry.attributes.position.array;
-                for (let i = 0; i < count; i++) {
-                    posArr[i * 3 + 2] += speeds[i];
+                const posArr = streaks.geometry.attributes.position.array;
+                const t = uniforms.u_time.value;
 
-                    if (posArr[i * 3 + 2] > 10) {
-                        posArr[i * 3 + 2] = -60;
+                for (let i = 0; i < streakCount; i++) {
+                    pData[i].radius += pData[i].speed * 0.02;
+                    
+                    if (pData[i].radius > 3.6) {
+                        pData[i].radius = 0.1;
+                        pData[i].angle = Math.random() * Math.PI * 2;
                     }
+
+                    const r = pData[i].radius;
+                    const a = pData[i].angle;
+                    
+                    posArr[i * 3] = Math.cos(a) * r;
+                    posArr[i * 3 + 1] = Math.sin(a) * r * 0.7 - 1.5;
+                    posArr[i * 3 + 2] = pData[i].baseZ + Math.sin(t + i * 0.1) * 0.2;
                 }
-                warpParticles.geometry.attributes.position.needsUpdate = true;
+                streaks.geometry.attributes.position.needsUpdate = true;
             };
 
             return group;

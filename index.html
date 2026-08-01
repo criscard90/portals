@@ -253,6 +253,7 @@
                 <option value="dragon">Dragon</option>
                 <option value="paradise">Paradise</option>
                 <option value="aurora">Aurora</option>
+                <option value="glitch">Glitch</option>
             </select>
         </div>
         <div class="controls-carousel-toggle-row">
@@ -2691,6 +2692,371 @@
             return group;
         }
 
+        function buildGlitchPortal() {
+            const group = new THREE.Group();
+
+            // Shader glitch con split RGB, scanline e distorsione digitale
+            const glitchMat = new THREE.ShaderMaterial({
+                uniforms: {
+                    u_time: uniforms.u_time,
+                    u_glitch_intensity: { value: 0 }
+                },
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float u_time;
+                    uniform float u_glitch_intensity;
+                    varying vec2 vUv;
+
+                    float hash(vec2 p) {
+                        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+                    }
+
+                    float noise(vec2 p) {
+                        vec2 i = floor(p);
+                        vec2 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        return mix(
+                            mix(hash(i), hash(i + vec2(1.0,0.0)), f.x),
+                            mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0,1.0)), f.x),
+                            f.y
+                        );
+                    }
+
+                    float fbm(vec2 p) {
+                        float v = 0.0;
+                        float a = 0.5;
+                        for (int i = 0; i < 4; i++) {
+                            v += a * noise(p);
+                            p *= 2.0;
+                            a *= 0.5;
+                        }
+                        return v;
+                    }
+
+                    void main() {
+                        vec2 uv = vUv;
+                        float time = u_time;
+                        float glitch = u_glitch_intensity;
+
+                        // Maschera circolare (stessa forma degli altri portali)
+                        vec2 pos = uv - 0.5;
+                        float dist = length(pos);
+                        float mask = smoothstep(0.48, 0.0, dist);
+
+                        // Distorsione glitch: bande orizzontali che si spostano
+                        float band1 = floor(uv.y * 12.0 + sin(time * 3.0) * 2.0);
+                        float band2 = floor(uv.y * 20.0 - cos(time * 2.5) * 3.0);
+                        float bandShift1 = hash(vec2(band1, floor(time * 2.0))) * 0.15;
+                        float bandShift2 = hash(vec2(band2, floor(time * 1.5))) * 0.1;
+
+                        // Split RGB con offset orizzontale (amplificato durante shake)
+                        float glitchAmount = 0.03 + 0.02 * sin(time * 5.0);
+                        float glitchPulse = step(0.92, hash(vec2(floor(time * 3.0), 0.0)));
+                        glitchAmount *= 1.0 + glitchPulse * 3.0;
+                        glitchAmount *= 1.0 + glitch * 4.0;
+
+                        vec2 uvR = uv + vec2(glitchAmount + bandShift1, 0.0);
+                        vec2 uvG = uv;
+                        vec2 uvB = uv - vec2(glitchAmount + bandShift2, 0.0);
+
+                        // Pattern digitale di base (fbm distorto)
+                        float pattern = fbm(vec2(uv.x * 6.0 + time * 0.5, uv.y * 6.0 - time * 0.3));
+                        float pattern2 = fbm(vec2(uv.x * 10.0 - time * 0.8, uv.y * 8.0 + time * 0.4));
+
+                        // Scanline orizzontali (più intense durante shake)
+                        float scanlines = sin(uv.y * 80.0 + time * 2.0) * 0.5 + 0.5;
+                        scanlines = pow(scanlines, 8.0) * 0.15;
+                        scanlines *= 1.0 + glitch * 3.0;
+
+                        // Interferenza digitale (amplificata durante shake)
+                        float interference = sin(uv.x * 30.0 + time * 4.0) * sin(uv.y * 25.0 - time * 3.0);
+                        interference = interference * 0.5 + 0.5;
+                        interference = pow(interference, 3.0) * 0.2;
+                        interference *= 1.0 + glitch * 5.0;
+
+                        // --- INTERFERENZA TV (effetto distorsione immagine) ---
+                        // Distorsione orizzontale dell'immagine (come TV con problemi)
+                        float tvDistort = sin(uv.y * 40.0 + time * 8.0) * 0.02 * glitch;
+                        tvDistort += sin(uv.y * 15.0 - time * 5.0) * 0.03 * glitch;
+                        uv.x += tvDistort;
+
+                        // Bande di interferenza verticali che scorrono
+                        float tvBands = sin(uv.x * 20.0 - time * 10.0 * glitch) * 0.5 + 0.5;
+                        tvBands = pow(tvBands, 6.0) * glitch * 0.4;
+
+                        // Rumore statico TV (snow)
+                        float tvNoise = hash(vec2(floor(uv.x * 100.0 + time * 20.0), floor(uv.y * 100.0))) * glitch * 0.3;
+
+                        // Linee di sincronizzazione orizzontali (roll)
+                        float tvRoll = step(0.98, fract(uv.y * 3.0 + time * 2.0 * glitch)) * glitch * 0.5;
+
+                        // Colori glitch: ciano, magenta, verde acido, bianco
+                        vec3 cCyan = vec3(0.0, 1.0, 1.0);
+                        vec3 cMagenta = vec3(1.0, 0.0, 1.0);
+                        vec3 cGreen = vec3(0.3, 1.0, 0.2);
+                        vec3 cWhite = vec3(1.0, 1.0, 1.0);
+                        vec3 cDark = vec3(0.05, 0.05, 0.1);
+
+                        // Canali RGB separati
+                        float rChannel = pattern * 0.7 + pattern2 * 0.3;
+                        float gChannel = pattern2 * 0.6 + pattern * 0.4;
+                        float bChannel = pattern * 0.5 + pattern2 * 0.5;
+
+                        // Mix colore con split RGB
+                        vec3 color = cDark;
+                        color.r += rChannel * 0.8 + cCyan.r * 0.3;
+                        color.g += gChannel * 0.8 + cGreen.g * 0.3;
+                        color.b += bChannel * 0.8 + cMagenta.b * 0.3;
+
+                        // Aggiungi interferenza e scanline
+                        color += cWhite * interference * 0.5;
+                        color += cCyan * scanlines * 2.0;
+
+                        // Aggiungi effetti TV
+                        color += cWhite * tvNoise;
+                        color += cCyan * tvBands * 0.5;
+                        color += cMagenta * tvRoll * 0.5;
+
+                        // Bordo glitch luminoso
+                        float edge = smoothstep(0.48, 0.4, dist) * (1.0 - smoothstep(0.4, 0.35, dist));
+                        color += cCyan * edge * 0.5;
+                        color += cMagenta * edge * 0.3;
+
+                        // Bagliore centrale pulsante
+                        float glow = 1.0 - smoothstep(0.0, 0.3, dist);
+                        glow = pow(glow, 2.0);
+                        glow *= 0.5 + 0.5 * sin(time * 2.0);
+                        color += cWhite * glow * 0.3;
+
+                        float alpha = (pattern * 0.5 + pattern2 * 0.3 + interference * 0.4 + scanlines * 0.3 + edge * 0.5 + glow * 0.3 + tvNoise * 0.5 + tvBands * 0.3 + tvRoll * 0.3) * mask;
+                        gl_FragColor = vec4(color, alpha * 0.9);
+                    }
+                `
+            });
+
+            const plane = new THREE.PlaneGeometry(5, 7, 1, 1);
+            const mesh = new THREE.Mesh(plane, glitchMat);
+            group.add(mesh);
+
+            // Particelle glitch: pixel digitali che fluttuano
+            const pixelCount = 1500;
+            const pixelGeo = new THREE.BufferGeometry();
+            const pixelPos = new Float32Array(pixelCount * 3);
+            const pixelCol = new Float32Array(pixelCount * 3);
+            const pixelData = [];
+
+            const cCyan = new THREE.Color(0.0, 1.0, 1.0);
+            const cMagenta = new THREE.Color(1.0, 0.0, 1.0);
+            const cGreen = new THREE.Color(0.3, 1.0, 0.2);
+            const cWhite = new THREE.Color(1.0, 1.0, 1.0);
+
+            for (let i = 0; i < pixelCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 2.0;
+
+                pixelPos[i*3] = Math.cos(angle) * radius;
+                pixelPos[i*3+1] = Math.sin(angle) * radius;
+                pixelPos[i*3+2] = (Math.random() - 0.5) * 0.3;
+
+                const rand = Math.random();
+                const c = rand > 0.6 ? cCyan : (rand > 0.4 ? cMagenta : (rand > 0.2 ? cGreen : cWhite));
+                pixelCol[i*3] = c.r;
+                pixelCol[i*3+1] = c.g;
+                pixelCol[i*3+2] = c.b;
+
+                pixelData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: 0.003 + Math.random() * 0.008,
+                    drift: (Math.random() - 0.5) * 0.003,
+                    life: Math.random(),
+                    phase: Math.random() * 6.28,
+                    jitter: 0.01 + Math.random() * 0.03
+                });
+            }
+
+            pixelGeo.setAttribute('position', new THREE.BufferAttribute(pixelPos, 3));
+            pixelGeo.setAttribute('color', new THREE.BufferAttribute(pixelCol, 3));
+
+            const pixelMat = new THREE.PointsMaterial({
+                size: 0.05,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            const pixelPoints = new THREE.Points(pixelGeo, pixelMat);
+            group.add(pixelPoints);
+
+            // Scintille glitch che lampeggiano
+            const glitchSparkCount = 300;
+            const glitchSparkGeo = new THREE.BufferGeometry();
+            const glitchSparkPos = new Float32Array(glitchSparkCount * 3);
+            const glitchSparkCol = new Float32Array(glitchSparkCount * 3);
+            const glitchSparkData = [];
+
+            for (let i = 0; i < glitchSparkCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 1.8;
+
+                glitchSparkPos[i*3] = Math.cos(angle) * radius;
+                glitchSparkPos[i*3+1] = Math.sin(angle) * radius;
+                glitchSparkPos[i*3+2] = (Math.random() - 0.5) * 0.2;
+
+                const rand = Math.random();
+                const c = rand > 0.5 ? cWhite : (rand > 0.25 ? cCyan : cMagenta);
+                glitchSparkCol[i*3] = c.r;
+                glitchSparkCol[i*3+1] = c.g;
+                glitchSparkCol[i*3+2] = c.b;
+
+                glitchSparkData.push({
+                    angle: angle,
+                    radius: radius,
+                    speed: 0.01 + Math.random() * 0.02,
+                    life: Math.random(),
+                    phase: Math.random() * 6.28
+                });
+            }
+
+            glitchSparkGeo.setAttribute('position', new THREE.BufferAttribute(glitchSparkPos, 3));
+            glitchSparkGeo.setAttribute('color', new THREE.BufferAttribute(glitchSparkCol, 3));
+
+            const glitchSparkMat = new THREE.PointsMaterial({
+                size: 0.04,
+                vertexColors: true,
+                map: particleTexture,
+                transparent: true,
+                opacity: 0.7,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            const glitchSparkPoints = new THREE.Points(glitchSparkGeo, glitchSparkMat);
+            group.add(glitchSparkPoints);
+
+            // Sistema di shake glitch: burst forti periodici
+            let shakeIntensity = 0;
+            let shakeCooldown = 0.5 + Math.random() * 2.0;
+            let shakeDuration = 0;
+            let shakeOffsetX = 0;
+            let shakeOffsetY = 0;
+            let shakeRotation = 0;
+
+            group.userData.update = () => {
+                const t = uniforms.u_time.value;
+                const colObj = new THREE.Color();
+
+                // --- SHAKE GLITCH FORTE ---
+                shakeCooldown -= 0.016;
+                if (shakeCooldown <= 0) {
+                    // Trigger burst glitch forte
+                    shakeIntensity = 0.15 + Math.random() * 0.35;
+                    shakeDuration = 0.3 + Math.random() * 0.5;
+                    shakeCooldown = 1.0 + Math.random() * 3.0;
+                }
+
+                if (shakeDuration > 0) {
+                    shakeDuration -= 0.016;
+                    // Jitter violento con rumore casuale
+                    shakeOffsetX = (Math.random() - 0.5) * shakeIntensity * 2.0;
+                    shakeOffsetY = (Math.random() - 0.5) * shakeIntensity * 1.5;
+                    shakeRotation = (Math.random() - 0.5) * shakeIntensity * 0.3;
+                    // Decay dello shake
+                    shakeIntensity *= 0.92;
+                } else {
+                    // Ritorno fluido alla posizione originale
+                    shakeOffsetX *= 0.85;
+                    shakeOffsetY *= 0.85;
+                    shakeRotation *= 0.85;
+                }
+
+                // Applica shake al gruppo
+                group.position.x = shakeOffsetX;
+                group.position.y = -1.5 + shakeOffsetY;
+                group.rotation.z = shakeRotation;
+
+                // Aggiorna intensità glitch per lo shader (TV interference)
+                glitchMat.uniforms.u_glitch_intensity.value = shakeIntensity;
+
+                // Aggiorna pixel digitali
+                const pPos = pixelPoints.geometry.attributes.position.array;
+                const pCol = pixelPoints.geometry.attributes.color.array;
+
+                for (let i = 0; i < pixelCount; i++) {
+                    pixelData[i].life += 0.004;
+                    if (pixelData[i].life > 1) {
+                        pixelData[i].life = 0;
+                        pixelData[i].radius = Math.random() * 2.0;
+                        pixelData[i].angle = Math.random() * Math.PI * 2;
+                    }
+
+                    pixelData[i].angle += pixelData[i].speed;
+                    pixelData[i].radius += pixelData[i].drift;
+
+                    if (pixelData[i].radius > 2.2) pixelData[i].radius = 0.1;
+                    if (pixelData[i].radius < 0.1) pixelData[i].radius = 2.2;
+
+                    // Jitter glitch: salti casuali di posizione
+                    const jitterX = (Math.sin(pixelData[i].phase + t * 3.0) * 43758.5453 % 1.0 - 0.5) * pixelData[i].jitter;
+                    const jitterY = (Math.sin(pixelData[i].phase + t * 2.5) * 43758.5453 % 1.0 - 0.5) * pixelData[i].jitter;
+
+                    pPos[i*3] = Math.cos(pixelData[i].angle) * pixelData[i].radius + jitterX;
+                    pPos[i*3+1] = Math.sin(pixelData[i].angle) * pixelData[i].radius + jitterY;
+
+                    const pulse = Math.sin(pixelData[i].life * Math.PI);
+                    const hue = 0.5 + pulse * 0.2 + Math.sin(t * 0.3) * 0.1;
+                    colObj.setHSL(hue, 0.9, 0.4 + pulse * 0.5);
+                    pCol[i*3] = colObj.r;
+                    pCol[i*3+1] = colObj.g;
+                    pCol[i*3+2] = colObj.b;
+                }
+                pixelPoints.geometry.attributes.position.needsUpdate = true;
+                pixelPoints.geometry.attributes.color.needsUpdate = true;
+
+                // Aggiorna scintille glitch
+                const sPos = glitchSparkPoints.geometry.attributes.position.array;
+                const sCol = glitchSparkPoints.geometry.attributes.color.array;
+
+                for (let i = 0; i < glitchSparkCount; i++) {
+                    glitchSparkData[i].life += 0.008;
+                    if (glitchSparkData[i].life > 1) {
+                        glitchSparkData[i].life = 0;
+                        glitchSparkData[i].radius = Math.random() * 1.8;
+                        glitchSparkData[i].angle = Math.random() * Math.PI * 2;
+                    }
+
+                    glitchSparkData[i].radius += glitchSparkData[i].speed;
+                    if (glitchSparkData[i].radius > 2.0) glitchSparkData[i].radius = 0.1;
+
+                    sPos[i*3] = Math.cos(glitchSparkData[i].angle) * glitchSparkData[i].radius;
+                    sPos[i*3+1] = Math.sin(glitchSparkData[i].angle) * glitchSparkData[i].radius;
+
+                    const pulse = Math.sin(glitchSparkData[i].life * Math.PI);
+                    colObj.setHSL(0.5 + pulse * 0.2, 0.9, 0.3 + pulse * 0.6);
+                    sCol[i*3] = colObj.r;
+                    sCol[i*3+1] = colObj.g;
+                    sCol[i*3+2] = colObj.b;
+                }
+                glitchSparkPoints.geometry.attributes.position.needsUpdate = true;
+                glitchSparkPoints.geometry.attributes.color.needsUpdate = true;
+            };
+
+            return group;
+        }
+
         // --- SWITCHER PORTALI ---
         function switchPortal(type) {
             gsap.to(currentGroup.scale, {
@@ -2710,6 +3076,7 @@
                     else if (type === 'dragon') currentGroup = buildDragonPortal();
                     else if (type === 'paradise') currentGroup = buildParadisePortal();
                     else if (type === 'aurora') currentGroup = buildAuroraPortal();
+                    else if (type === 'glitch') currentGroup = buildGlitchPortal();
 
                     currentGroup.position.y = -1.5;
                     currentGroup.scale.set(0, 0, 0);
